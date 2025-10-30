@@ -1,0 +1,583 @@
+// SIAONDA V2 - Database Schema
+// Basado en el análisis del sistema original
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USUARIOS Y AUTENTICACIÓN
+// ============================================
+
+model Usuario {
+  id                 Int       @id @default(autoincrement())
+  nombre             String    @unique @db.VarChar(50)  // username
+  contrasena         String    @db.VarChar(255)         // bcrypt hash
+  codigo             String    @unique @db.VarChar(20)  // código de empleado
+  nombrecompleto     String    @db.VarChar(200)
+  correo             String?   @db.VarChar(100)
+  tipoId             Int       @map("tipo_id")
+  estadoId           Int       @map("estado_id")
+  supervisorId       Int?      @map("supervisor_id")
+
+  // Seguridad
+  token              String?   @db.VarChar(255)
+  tokenExpiracion    DateTime? @map("token_expiracion")
+  intentosFallidos   Int       @default(0) @map("intentos_fallidos")
+
+  // Auditoría
+  creadoEn           DateTime  @default(now()) @map("creado_en")
+  actualizadoEn      DateTime  @updatedAt @map("actualizado_en")
+
+  // Relaciones
+  tipo               UsuarioTipo     @relation(fields: [tipoId], references: [id])
+  estado             UsuarioEstado   @relation(fields: [estadoId], references: [id])
+  supervisor         Usuario?        @relation("Supervisor", fields: [supervisorId], references: [id])
+  subordinados       Usuario[]       @relation("Supervisor")
+
+  formularios        Formulario[]
+  certificados       Certificado[]
+  cajas              Caja[]
+  pagos              Pago[]
+
+  @@map("usuarios")
+  @@index([token])
+  @@index([correo])
+}
+
+model UsuarioTipo {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50)
+  descripcion String?   @db.Text
+
+  usuarios    Usuario[]
+
+  @@map("usuarios_tipos")
+}
+
+model UsuarioEstado {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50)
+  descripcion String?   @db.Text
+
+  usuarios    Usuario[]
+
+  @@map("usuarios_estados")
+}
+
+// ============================================
+// CLIENTES / AUTORES
+// ============================================
+
+model Cliente {
+  id                    Int       @id @default(autoincrement())
+  codigo                String    @unique @db.VarChar(20)
+  identificacion        String    @unique @db.VarChar(50) // Cédula/Pasaporte/RNC
+  tipoIdentificacion    String?   @db.VarChar(20) @map("tipo_identificacion") // Cedula, Pasaporte, RNC, ActaNacimiento
+  nombre                String    @db.VarChar(200)
+  apellido              String?   @db.VarChar(200)
+  nombrecompleto        String    @db.VarChar(400)
+  seudonimo             String?   @db.VarChar(200)
+  genero                String?   @db.VarChar(1) // M, F
+
+  // Dirección completa
+  direccion             String?   @db.Text
+  municipio             String?   @db.VarChar(100)
+  sector                String?   @db.VarChar(100)
+  provincia             String?   @db.VarChar(100)
+
+  // Contacto
+  telefono              String?   @db.VarChar(50)
+  movil                 String?   @db.VarChar(50)
+  correo                String?   @db.VarChar(100)
+
+  // Clasificación
+  tipoId                Int       @map("tipo_id")
+  nacionalidadId        Int       @map("nacionalidad_id")
+
+  // Otros
+  rnc                   String?   @db.VarChar(50)
+  fallecido             Boolean   @default(false)
+  fechaFallecimiento    DateTime? @map("fecha_fallecimiento")
+
+  creadoEn              DateTime  @default(now()) @map("creado_en")
+  actualizadoEn         DateTime  @updatedAt @map("actualizado_en")
+
+  tipo                  ClienteTipo         @relation(fields: [tipoId], references: [id])
+  nacionalidad          ClienteNacionalidad @relation(fields: [nacionalidadId], references: [id])
+
+  archivos              ClienteArchivo[]
+  formularios           FormularioCliente[]
+  facturas              Factura[]
+  visitas               Visita[]
+
+  @@map("clientes")
+  @@index([identificacion])
+  @@index([nombrecompleto])
+}
+
+model ClienteTipo {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50) // Autor, Compositor, Intérprete, Editor, etc.
+  descripcion String?   @db.Text
+
+  clientes    Cliente[]
+
+  @@map("clientes_tipos")
+}
+
+model ClienteNacionalidad {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(100)
+  codigo      String?   @db.VarChar(5) // DO, US, ES, etc.
+
+  clientes    Cliente[]
+
+  @@map("clientes_nacionalidades")
+}
+
+model ClienteArchivo {
+  id          Int       @id @default(autoincrement())
+  clienteId   Int       @map("cliente_id")
+  nombre      String    @db.VarChar(255)
+  ruta        String    @db.VarChar(500)
+  tipo        String    @db.VarChar(50) // pdf, jpg, png
+  tamano      Int       // bytes
+
+  creadoEn    DateTime  @default(now()) @map("creado_en")
+
+  cliente     Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@map("clientes_archivos")
+}
+
+// ============================================
+// FORMULARIOS / OBRAS
+// ============================================
+
+model Formulario {
+  id              Int       @id @default(autoincrement())
+  codigo          String    @unique @db.VarChar(50) // FORM-YYYY-NNNN
+  fecha           DateTime  @default(now())
+  estadoId        Int       @map("estado_id")
+  usuarioId       Int       @map("usuario_id")
+  facturaId       Int?      @map("factura_id")
+  firma           String?   @db.Text // Base64 de firma digital
+  observaciones   String?   @db.Text
+
+  creadoEn        DateTime  @default(now()) @map("creado_en")
+  actualizadoEn   DateTime  @updatedAt @map("actualizado_en")
+
+  estado          FormularioEstado      @relation(fields: [estadoId], references: [id])
+  usuario         Usuario               @relation(fields: [usuarioId], references: [id])
+  factura         Factura?              @relation(fields: [facturaId], references: [id])
+
+  productos       FormularioProducto[]
+  clientes        FormularioCliente[]
+  certificados    Certificado[]
+
+  @@map("formularios")
+  @@index([codigo])
+  @@index([fecha])
+}
+
+model FormularioEstado {
+  id          Int         @id @default(autoincrement())
+  nombre      String      @unique @db.VarChar(50) // Pendiente, Recibido, En Proceso, Asentado, Certificado
+  descripcion String?     @db.Text
+
+  formularios Formulario[]
+
+  @@map("formularios_estados")
+}
+
+model FormularioProducto {
+  id              Int       @id @default(autoincrement())
+  formularioId    Int       @map("formulario_id")
+  productoId      Int       @map("producto_id")
+  productoMadreId Int?      @map("producto_madre_id")
+  cantidad        Int       @default(1)
+
+  formulario      Formulario              @relation(fields: [formularioId], references: [id], onDelete: Cascade)
+  producto        Producto                @relation("FormularioProductos", fields: [productoId], references: [id])
+  productoMadre   Producto?               @relation("ProductoHijos", fields: [productoMadreId], references: [id])
+
+  campos          FormularioProductoCampo[]
+  certificados    Certificado[]
+
+  @@map("formularios_productos")
+  @@index([formularioId])
+}
+
+model FormularioProductoCampo {
+  id                    Int       @id @default(autoincrement())
+  formularioProductoId  Int       @map("formulario_producto_id")
+  campoId               Int       @map("campo_id")
+  valor                 String    @db.Text
+
+  formularioProducto    FormularioProducto @relation(fields: [formularioProductoId], references: [id], onDelete: Cascade)
+  campo                 FormularioCampo    @relation(fields: [campoId], references: [id])
+
+  @@map("formularios_productos_campos")
+  @@index([formularioProductoId])
+}
+
+model FormularioCliente {
+  id            Int       @id @default(autoincrement())
+  formularioId  Int       @map("formulario_id")
+  clienteId     Int       @map("cliente_id")
+  tipoRelacion  String    @db.VarChar(50) // Autor, Compositor, Intérprete, etc.
+
+  formulario    Formulario @relation(fields: [formularioId], references: [id], onDelete: Cascade)
+  cliente       Cliente    @relation(fields: [clienteId], references: [id])
+
+  @@map("formularios_clientes")
+  @@index([formularioId])
+  @@index([clienteId])
+}
+
+model FormularioCampo {
+  id          Int       @id @default(autoincrement())
+  productoId  Int?      @map("producto_id") // null = campo global
+  tipoId      Int       @map("tipo_id")
+  campo       String    @db.VarChar(100)  // nombre técnico
+  titulo      String    @db.VarChar(200)  // título visible
+  descripcion String?   @db.Text
+  requerido   Boolean   @default(false)
+  orden       Int       @default(0)
+  activo      Boolean   @default(true)
+
+  tipo        FormularioCampoTipo         @relation(fields: [tipoId], references: [id])
+  producto    Producto?                   @relation(fields: [productoId], references: [id])
+
+  valores     FormularioProductoCampo[]
+
+  @@map("formularios_campos")
+  @@index([productoId])
+}
+
+model FormularioCampoTipo {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50) // texto, numerico, listado, fecha, archivo, checkbox
+  descripcion String?   @db.Text
+
+  campos      FormularioCampo[]
+
+  @@map("formularios_campos_tipos")
+}
+
+// ============================================
+// PRODUCTOS / SERVICIOS
+// ============================================
+
+model Producto {
+  id          Int       @id @default(autoincrement())
+  codigo      String    @unique @db.VarChar(20) // IRC001, IRC002, etc.
+  nombre      String    @db.VarChar(200)
+  descripcion String?   @db.Text
+  categoria   String    @db.VarChar(100) // Musical, Literaria, Audiovisual, etc.
+  estadoId    Int       @map("estado_id")
+
+  creadoEn    DateTime  @default(now()) @map("creado_en")
+
+  estado              ProductoEstado        @relation(fields: [estadoId], references: [id])
+
+  costos              ProductoCosto[]
+  campos              FormularioCampo[]
+  formularios         FormularioProducto[]  @relation("FormularioProductos")
+  productosHijos      FormularioProducto[]  @relation("ProductoHijos")
+  facturaDetalles     FacturaDetalle[]
+
+  @@map("productos")
+  @@index([categoria])
+}
+
+model ProductoEstado {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50)
+  descripcion String?   @db.Text
+
+  productos   Producto[]
+
+  @@map("productos_estados")
+}
+
+model ProductoCosto {
+  id            Int       @id @default(autoincrement())
+  productoId    Int       @map("producto_id")
+  precio        Decimal   @db.Decimal(10, 2)
+  cantidadMin   Int       @default(1) @map("cantidad_min")
+  cantidadMax   Int?      @map("cantidad_max")
+  fechaInicio   DateTime  @default(now()) @map("fecha_inicio")
+  fechaFinal    DateTime? @map("fecha_final")
+
+  producto      Producto  @relation(fields: [productoId], references: [id], onDelete: Cascade)
+
+  @@map("productos_costos")
+  @@index([productoId])
+  @@index([fechaInicio, fechaFinal])
+}
+
+// ============================================
+// CERTIFICADOS
+// ============================================
+
+model Certificado {
+  id                    Int       @id @default(autoincrement())
+  codigo                String    @unique @db.VarChar(50) // CERT-YYYY-NNNN
+  formularioId          Int       @map("formulario_id")
+  formularioProductoId  Int       @map("formulario_producto_id")
+  estadoId              Int       @map("estado_id")
+  usuarioEmisionId      Int?      @map("usuario_emision_id")
+  fechaEmision          DateTime? @map("fecha_emision")
+  fechaEntrega          DateTime? @map("fecha_entrega")
+  archivo               String?   @db.VarChar(500) // Path al PDF
+  fecha                 DateTime  @default(now())
+  libroNumero           Int       @map("libro_numero")
+  observaciones         String?   @db.Text
+
+  creadoEn              DateTime  @default(now()) @map("creado_en")
+
+  formulario            Formulario         @relation(fields: [formularioId], references: [id])
+  formularioProducto    FormularioProducto @relation(fields: [formularioProductoId], references: [id])
+  estado                CertificadoEstado  @relation(fields: [estadoId], references: [id])
+  usuarioEmision        Usuario?           @relation(fields: [usuarioEmisionId], references: [id])
+
+  facturas              Factura[]
+
+  @@map("certificados")
+  @@index([codigo])
+  @@index([formularioId])
+}
+
+model CertificadoEstado {
+  id           Int           @id @default(autoincrement())
+  nombre       String        @unique @db.VarChar(50) // Pendiente, Generado, Entregado
+  descripcion  String?       @db.Text
+
+  certificados Certificado[]
+
+  @@map("certificados_estados")
+}
+
+// ============================================
+// FACTURAS Y PAGOS
+// ============================================
+
+model Factura {
+  id              Int       @id @default(autoincrement())
+  codigo          String    @unique @db.VarChar(50) // Número de factura
+  ncf             String?   @unique @db.VarChar(50) // Número Comprobante Fiscal
+  rnc             String?   @db.VarChar(20)         // RNC del cliente
+  clienteId       Int       @map("cliente_id")
+  cajaId          Int?      @map("caja_id")
+  estadoId        Int       @map("estado_id")
+  certificadoId   Int?      @map("certificado_id")
+  fecha           DateTime  @default(now())
+  subtotal        Decimal   @db.Decimal(10, 2)
+  itbis           Decimal   @db.Decimal(10, 2)
+  total           Decimal   @db.Decimal(10, 2)
+  pagado          Decimal   @default(0) @db.Decimal(10, 2)
+  metodoPago      String?   @db.VarChar(50) @map("metodo_pago")
+  fechaPago       DateTime? @map("fecha_pago")
+  referenciaPago  String?   @db.VarChar(100) @map("referencia_pago")
+  observaciones   String?   @db.Text
+
+  creadoEn        DateTime  @default(now()) @map("creado_en")
+
+  cliente         Cliente         @relation(fields: [clienteId], references: [id])
+  caja            Caja?           @relation(fields: [cajaId], references: [id])
+  estado          FacturaEstado   @relation(fields: [estadoId], references: [id])
+  certificado     Certificado?    @relation(fields: [certificadoId], references: [id])
+
+  detalles        FacturaDetalle[]
+  items           FacturaItem[]
+  pagos           Pago[]
+  formularios     Formulario[]
+
+  @@map("facturas")
+  @@index([codigo])
+  @@index([ncf])
+  @@index([fecha])
+}
+
+model FacturaEstado {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50) // Pendiente, Pagada, Anulada
+  descripcion String?   @db.Text
+
+  facturas    Factura[]
+
+  @@map("facturas_estados")
+}
+
+model FacturaDetalle {
+  id           Int      @id @default(autoincrement())
+  facturaId    Int      @map("factura_id")
+  productoId   Int      @map("producto_id")
+  descripcion  String   @db.VarChar(500)
+  cantidad     Int      @default(1)
+  costoUnidad  Decimal  @db.Decimal(10, 2) @map("costo_unidad")
+  total        Decimal  @db.Decimal(10, 2)
+
+  factura      Factura  @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+  producto     Producto @relation(fields: [productoId], references: [id])
+
+  @@map("facturas_detalles")
+  @@index([facturaId])
+}
+
+model FacturaItem {
+  id              Int      @id @default(autoincrement())
+  facturaId       Int      @map("factura_id")
+  concepto        String   @db.VarChar(500)
+  cantidad        Int      @default(1)
+  precioUnitario  Decimal  @db.Decimal(10, 2) @map("precio_unitario")
+  subtotal        Decimal  @db.Decimal(10, 2)
+  itbis           Decimal  @db.Decimal(10, 2)
+  total           Decimal  @db.Decimal(10, 2)
+
+  factura         Factura  @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+
+  @@map("facturas_items")
+  @@index([facturaId])
+}
+
+model Pago {
+  id          Int       @id @default(autoincrement())
+  facturaId   Int       @map("factura_id")
+  monto       Decimal   @db.Decimal(10, 2)
+  fecha       DateTime  @default(now())
+  usuarioId   Int       @map("usuario_id")
+  referencia  String?   @db.VarChar(100) // Referencia de pago
+
+  factura     Factura   @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id])
+
+  @@map("pagos")
+  @@index([facturaId])
+  @@index([fecha])
+}
+
+// ============================================
+// CAJAS
+// ============================================
+
+model Caja {
+  id              Int       @id @default(autoincrement())
+  codigo          String    @unique @db.VarChar(20)
+  descripcion     String    @db.VarChar(200)
+  estadoId        Int       @map("estado_id")
+  sucursalId      Int?      @map("sucursal_id")
+  usuarioId       Int?      @map("usuario_id") // Cajero asignado
+  fecha           DateTime  @default(now())
+  horaApertura    DateTime? @map("hora_apertura")
+  horaCierre      DateTime? @map("hora_cierre")
+  montoInicial    Decimal   @default(0) @db.Decimal(10, 2) @map("monto_inicial")
+  montoFinal      Decimal?  @db.Decimal(10, 2) @map("monto_final")
+  totalFacturas   Decimal?  @db.Decimal(10, 2) @map("total_facturas")
+  diferencia      Decimal?  @db.Decimal(10, 2)
+  observaciones   String?   @db.Text
+
+  creadoEn        DateTime  @default(now()) @map("creado_en")
+
+  estado          CajaEstado  @relation(fields: [estadoId], references: [id])
+  sucursal        Sucursal?   @relation(fields: [sucursalId], references: [id])
+  usuario         Usuario?    @relation(fields: [usuarioId], references: [id])
+
+  cierres         Cierre[]
+  facturas        Factura[]
+
+  @@map("cajas")
+}
+
+model CajaEstado {
+  id          Int     @id @default(autoincrement())
+  nombre      String  @unique @db.VarChar(50) // Abierta, Cerrada, En Proceso
+  descripcion String? @db.Text
+
+  cajas       Caja[]
+
+  @@map("cajas_estados")
+}
+
+model Cierre {
+  id              Int       @id @default(autoincrement())
+  cajaId          Int       @map("caja_id")
+  fechaInicio     DateTime  @map("fecha_inicio")
+  fechaFinal      DateTime  @map("fecha_final")
+  estadoId        Int       @map("estado_id")
+  totalEsperado   Decimal   @db.Decimal(10, 2) @map("total_esperado")
+  totalReal       Decimal   @db.Decimal(10, 2) @map("total_real")
+  diferencia      Decimal   @db.Decimal(10, 2)
+  reporte         String?   @db.VarChar(500) // Path al PDF
+
+  creadoEn        DateTime  @default(now()) @map("creado_en")
+
+  caja            Caja          @relation(fields: [cajaId], references: [id])
+  estado          CierreEstado  @relation(fields: [estadoId], references: [id])
+
+  @@map("cierres")
+  @@index([cajaId])
+  @@index([fechaInicio, fechaFinal])
+}
+
+model CierreEstado {
+  id          Int      @id @default(autoincrement())
+  nombre      String   @unique @db.VarChar(50)
+  descripcion String?  @db.Text
+
+  cierres     Cierre[]
+
+  @@map("cierres_estados")
+}
+
+// ============================================
+// SUCURSALES
+// ============================================
+
+model Sucursal {
+  id          Int      @id @default(autoincrement())
+  codigo      String   @unique @db.VarChar(20)
+  nombre      String   @db.VarChar(200)
+  direccion   String?  @db.Text
+  telefono    String?  @db.VarChar(50)
+  ciudad      String?  @db.VarChar(100)
+  activo      Boolean  @default(true)
+
+  creadoEn    DateTime @default(now()) @map("creado_en")
+
+  cajas       Caja[]
+
+  @@map("sucursales")
+}
+
+// ============================================
+// VISITAS / RECEPCIÓN
+// ============================================
+
+model Visita {
+  id                Int       @id @default(autoincrement())
+  clienteId         Int       @map("cliente_id")
+  fechaEntrada      DateTime  @default(now()) @map("fecha_entrada")
+  fechaSalida       DateTime? @map("fecha_salida")
+  tipoVisita        String    @db.VarChar(100) @map("tipo_visita") // SOLICITUD DE REGISTRO, RETIRO CERTIFICADOS, VISITANTE, etc.
+  departamento      String?   @db.VarChar(100) // Departamento a visitar
+  personaContacto   String?   @db.VarChar(200) @map("persona_contacto")
+  razonVisita       String?   @db.VarChar(500) @map("razon_visita")
+  nota              String?   @db.Text
+
+  creadoEn          DateTime  @default(now()) @map("creado_en")
+  actualizadoEn     DateTime  @updatedAt @map("actualizado_en")
+
+  cliente           Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@map("visitas")
+  @@index([clienteId])
+  @@index([fechaEntrada])
+}
