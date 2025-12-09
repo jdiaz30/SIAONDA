@@ -8,7 +8,9 @@ import {
   generarReporteCierre,
   getCajaActiva,
   getEstadosCaja,
-  deleteCaja
+  deleteCaja,
+  getSolicitudesPendientes,
+  cobrarSolicitud
 } from '../controllers/cajas.controller';
 
 const router = Router();
@@ -17,6 +19,10 @@ router.use(authenticate);
 // Catálogos y operaciones especiales
 router.get('/estados', getEstadosCaja);
 router.get('/usuario/activa', getCajaActiva);
+
+// Solicitudes IRC - Integración con Caja
+router.get('/solicitudes-pendientes', getSolicitudesPendientes);
+router.post('/cobrar-solicitud/:id', cobrarSolicitud);
 
 // CRUD principal
 router.get('/', getCajas);

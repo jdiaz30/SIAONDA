@@ -1,0 +1,872 @@
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcrypt';
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log('🌱 Iniciando seeds...');
+
+  // 1. Estados de Usuario
+  console.log('📝 Creando estados de usuario...');
+  const estadoActivo = await prisma.usuarioEstado.upsert({
+    where: { nombre: 'Activo' },
+    update: {},
+    create: {
+      nombre: 'Activo',
+      descripcion: 'Usuario activo en el sistema'
+    }
+  });
+
+  const estadoInactivo = await prisma.usuarioEstado.upsert({
+    where: { nombre: 'Inactivo' },
+    update: {},
+    create: {
+      nombre: 'Inactivo',
+      descripcion: 'Usuario inactivo'
+    }
+  });
+
+  // 2. Tipos de Usuario (14 roles - Réplica de SIAONDA V1)
+  console.log('👥 Creando tipos de usuario...');
+  const roles = [
+    { nombre: 'SUPERUSUARIO', descripcion: 'Acceso total al sistema' },
+    { nombre: 'ADMINISTRADOR', descripcion: 'Gestión completa del sistema' },
+    { nombre: 'SUPERVISOR', descripcion: 'Supervisión de operaciones' },
+    { nombre: 'COORDINADOR', descripcion: 'Coordinación de áreas' },
+    { nombre: 'CAJERO', descripcion: 'Manejo de cajas, pagos y facturación' },
+    { nombre: 'REGISTRADOR', descripcion: 'Registro de obras y certificados' },
+    { nombre: 'CERTIFICADOR', descripcion: 'Emisión de certificados' },
+    { nombre: 'DIGITADOR', descripcion: 'Ingreso y digitalización de datos' },
+    { nombre: 'FACTURADOR', descripcion: 'Generación de facturas' },
+    { nombre: 'ATENCION_USUARIO', descripcion: 'Atención al público y servicio al cliente' },
+    { nombre: 'RECEPCION', descripcion: 'Recepción de documentos y clientes' },
+    { nombre: 'REGIONAL', descripcion: 'Gestión de sucursales regionales' },
+    { nombre: 'CONTABLE', descripcion: 'Revisión contable y reportes financieros' },
+    { nombre: 'INSPECTORIA', descripcion: 'Inspección y auditoría' }
+  ];
+
+  const tiposUsuario = [];
+  for (const rol of roles) {
+    const tipo = await prisma.usuarioTipo.upsert({
+      where: { nombre: rol.nombre },
+      update: {},
+      create: rol
+    });
+    tiposUsuario.push(tipo);
+  }
+
+  // 3. Usuario Administrador
+  console.log('🔐 Creando usuario administrador...');
+  const tipoAdmin = tiposUsuario.find(t => t.nombre === 'ADMINISTRADOR')!;
+  const passwordHash = await bcrypt.hash('admin123', 10);
+
+  await prisma.usuario.upsert({
+    where: { nombre: 'admin' },
+    update: {},
+    create: {
+      nombre: 'admin',
+      contrasena: passwordHash,
+      codigo: 'ADM001',
+      nombrecompleto: 'Administrador del Sistema',
+      correo: 'admin@onda.gob.do',
+      tipoId: tipoAdmin.id,
+      estadoId: estadoActivo.id
+    }
+  });
+
+  // 4. Estados de Formulario
+  console.log('📋 Creando estados de formulario...');
+  const estadosFormulario = [
+    { nombre: 'Pendiente', descripcion: 'Formulario pendiente de procesamiento' },
+    { nombre: 'Recibido', descripcion: 'Formulario recibido' },
+    { nombre: 'En Proceso', descripcion: 'Formulario en proceso' },
+    { nombre: 'Asentado', descripcion: 'Formulario asentado' },
+    { nombre: 'Certificado', descripcion: 'Formulario certificado' }
+  ];
+
+  for (const estado of estadosFormulario) {
+    await prisma.formularioEstado.upsert({
+      where: { nombre: estado.nombre },
+      update: {},
+      create: estado
+    });
+  }
+
+  // 5. Estados de Certificado
+  console.log('📜 Creando estados de certificado...');
+  const estadosCertificado = [
+    { nombre: 'Pendiente', descripcion: 'Certificado pendiente de generación' },
+    { nombre: 'Generado', descripcion: 'Certificado generado' },
+    { nombre: 'Entregado', descripcion: 'Certificado entregado al cliente' }
+  ];
+
+  for (const estado of estadosCertificado) {
+    await prisma.certificadoEstado.upsert({
+      where: { nombre: estado.nombre },
+      update: {},
+      create: estado
+    });
+  }
+
+  // 6. Estados de Factura
+  console.log('💰 Creando estados de factura...');
+  const estadosFactura = [
+    { nombre: 'Pendiente', descripcion: 'Factura pendiente de pago' },
+    { nombre: 'Pagada', descripcion: 'Factura pagada completamente' },
+    { nombre: 'Anulada', descripcion: 'Factura anulada' }
+  ];
+
+  for (const estado of estadosFactura) {
+    await prisma.facturaEstado.upsert({
+      where: { nombre: estado.nombre },
+      update: {},
+      create: estado
+    });
+  }
+
+  // 7. Estados de Caja
+  console.log('🏦 Creando estados de caja...');
+  const estadosCaja = [
+    { nombre: 'Abierta', descripcion: 'Caja abierta y operativa' },
+    { nombre: 'Cerrada', descripcion: 'Caja cerrada' },
+    { nombre: 'En Proceso', descripcion: 'Caja en proceso de cierre' }
+  ];
+
+  for (const estado of estadosCaja) {
+    await prisma.cajaEstado.upsert({
+      where: { nombre: estado.nombre },
+      update: {},
+      create: estado
+    });
+  }
+
+  // 8. Estados de Cierre
+  console.log('📊 Creando estados de cierre...');
+  const estadosCierre = [
+    { nombre: 'En Proceso', descripcion: 'Cierre en proceso' },
+    { nombre: 'Completado', descripcion: 'Cierre completado' }
+  ];
+
+  for (const estado of estadosCierre) {
+    await prisma.cierreEstado.upsert({
+      where: { nombre: estado.nombre },
+      update: {},
+      create: estado
+    });
+  }
+
+  // 9. Estados de Producto
+  console.log('📦 Creando estados de producto...');
+  const estadoProductoActivo = await prisma.productoEstado.upsert({
+    where: { nombre: 'Activo' },
+    update: {},
+    create: {
+      nombre: 'Activo',
+      descripcion: 'Producto activo y disponible'
+    }
+  });
+
+  // 10. Tipos de Campos de Formulario
+  console.log('🔤 Creando tipos de campos...');
+  const tiposCampo = [
+    { nombre: 'texto', descripcion: 'Campo de texto libre' },
+    { nombre: 'numerico', descripcion: 'Campo numérico' },
+    { nombre: 'listado', descripcion: 'Lista desplegable' },
+    { nombre: 'fecha', descripcion: 'Selector de fecha' },
+    { nombre: 'archivo', descripcion: 'Subida de archivo' },
+    { nombre: 'checkbox', descripcion: 'Casilla de verificación' },
+    { nombre: 'divisor', descripcion: 'Divisor visual' }
+  ];
+
+  for (const tipo of tiposCampo) {
+    await prisma.formularioCampoTipo.upsert({
+      where: { nombre: tipo.nombre },
+      update: {},
+      create: tipo
+    });
+  }
+
+  // 11. Productos Oficiales ONDA (Según Resolución 013-2023)
+  console.log('🎨 Creando productos oficiales ONDA...');
+  const productos = [
+    // OBRAS MUSICALES Y AFINES
+    { codigo: 'MUS-01', nombre: 'Obras Musicales, con letra o sin ella', categoria: 'Musical', precio: 500.00 },
+    { codigo: 'MUS-02', nombre: 'Arreglo Musical', categoria: 'Musical', precio: 500.00 },
+    { codigo: 'MUS-03', nombre: 'Fonograma', categoria: 'Musical', precio: 1500.00 },
+    { codigo: 'MUS-04', nombre: 'Interpretaciones o Ejecuciones Musicales', categoria: 'Musical', precio: 500.00 },
+    { codigo: 'MUS-05', nombre: 'Emisiones de Radiodifusión', categoria: 'Musical', precio: 500.00 },
+
+    // OBRAS AUDIOVISUALES
+    { codigo: 'AUD-01', nombre: 'Obra Cinematográfica (largo metraje)', categoria: 'Audiovisual', precio: 7000.00 },
+    { codigo: 'AUD-02', nombre: 'Obra Cinematográfica (corto metraje)', categoria: 'Audiovisual', precio: 5000.00 },
+    { codigo: 'AUD-03', nombre: 'Documental (corto metraje)', categoria: 'Audiovisual', precio: 3000.00 },
+    { codigo: 'AUD-04', nombre: 'Documental (largo metraje), Temporada de Serie o Telenovela completa', categoria: 'Audiovisual', precio: 4000.00 },
+    { codigo: 'AUD-05', nombre: 'Capítulo de Serie, Videoclip, Jingle, Promoción', categoria: 'Audiovisual', precio: 2000.00 },
+
+    // OBRAS ESCÉNICAS
+    { codigo: 'ESC-01', nombre: 'Obra de Teatro', categoria: 'Escénica', precio: 1500.00 },
+    { codigo: 'ESC-02', nombre: 'Obra de Teatro Musical', categoria: 'Escénica', precio: 3000.00 },
+    { codigo: 'ESC-03', nombre: 'Concierto y/o Espectáculo', categoria: 'Escénica', precio: 1500.00 },
+    { codigo: 'ESC-04', nombre: 'Escenografía', categoria: 'Escénica', precio: 1500.00 },
+    { codigo: 'ESC-05', nombre: 'Obra coreográfica', categoria: 'Escénica', precio: 1000.00 },
+    { codigo: 'ESC-06', nombre: 'Monólogo', categoria: 'Escénica', precio: 1000.00 },
+    { codigo: 'ESC-07', nombre: 'Pantomima', categoria: 'Escénica', precio: 1000.00 },
+
+    // OBRAS DE ARTES VISUALES
+    { codigo: 'AP-01', nombre: 'Dibujo', categoria: 'Artes Visuales', precio: 1000.00 },
+    { codigo: 'AP-02', nombre: 'Fotografía', categoria: 'Artes Visuales', precio: 1000.00 },
+    { codigo: 'AP-03', nombre: 'Pintura', categoria: 'Artes Visuales', precio: 1000.00 },
+    { codigo: 'AP-04', nombre: 'Escultura', categoria: 'Artes Visuales', precio: 1000.00 },
+    { codigo: 'AP-05', nombre: 'Grabado', categoria: 'Artes Visuales', precio: 500.00 },
+
+    // OBRAS DE ARTE APLICADO
+    { codigo: 'AA-01', nombre: 'Diseño del espacio (Arquitectura de interiores, paisajismo)', categoria: 'Arte Aplicado', precio: 1000.00 },
+    { codigo: 'AA-02', nombre: 'Diseño textil (Ropa, vestuarios, accesorios)', categoria: 'Arte Aplicado', precio: 1000.00 },
+    { codigo: 'AA-03', nombre: 'Diseño de productos (Mobiliarios y objetos industriales)', categoria: 'Arte Aplicado', precio: 1000.00 },
+    { codigo: 'AA-04', nombre: 'Diseño de comunicación (Gráfico, publicidad, multimedia)', categoria: 'Arte Aplicado', precio: 1000.00 },
+    { codigo: 'AA-05', nombre: 'Artesanía artística (Cerámica, vitrales)', categoria: 'Arte Aplicado', precio: 1000.00 },
+    { codigo: 'AA-06', nombre: 'Artesanía artística (Joyería)', categoria: 'Arte Aplicado', precio: 1000.00 },
+    { codigo: 'AA-07', nombre: 'Juego de azar', categoria: 'Arte Aplicado', precio: 5000.00 },
+    { codigo: 'AA-08', nombre: 'Otros juegos', categoria: 'Arte Aplicado', precio: 3000.00 },
+
+    // OBRAS LITERARIAS (Selección de las más comunes)
+    { codigo: 'LIT-01', nombre: 'Letra para una obra musical', categoria: 'Literaria', precio: 500.00 },
+    { codigo: 'LIT-02', nombre: 'Poema', categoria: 'Literaria', precio: 500.00 },
+    { codigo: 'LIT-03', nombre: 'Libro', categoria: 'Literaria', precio: 3000.00 },
+    { codigo: 'LIT-04', nombre: 'Libro electrónico', categoria: 'Literaria', precio: 3000.00 },
+    { codigo: 'LIT-09', nombre: 'Guión Cinematográfico y Documental (largo metraje)', categoria: 'Literaria', precio: 5000.00 },
+    { codigo: 'LIT-14', nombre: 'Guión para Obra de Teatro', categoria: 'Literaria', precio: 1500.00 },
+    { codigo: 'LIT-15', nombre: 'Personaje', categoria: 'Literaria', precio: 2000.00 },
+    { codigo: 'LIT-17', nombre: 'Tesis, Monográfico o Anteproyecto', categoria: 'Literaria', precio: 1000.00 },
+
+    // OBRAS CIENTÍFICAS
+    { codigo: 'OC-01', nombre: 'Plano o Proyecto Arquitectónico', categoria: 'Científica', precio: 10000.00 },
+    { codigo: 'OC-03', nombre: 'Obra o Proyecto de Ingeniería', categoria: 'Científica', precio: 5000.00 },
+    { codigo: 'OC-06', nombre: 'Programa Computadora', categoria: 'Científica', precio: 10000.00 },
+    { codigo: 'OC-07', nombre: 'Página Web/Multimedia', categoria: 'Científica', precio: 3000.00 }
+  ];
+
+  for (const prod of productos) {
+    const producto = await prisma.producto.upsert({
+      where: { codigo: prod.codigo },
+      update: {},
+      create: {
+        codigo: prod.codigo,
+        nombre: prod.nombre,
+        categoria: prod.categoria,
+        descripcion: `Registro de ${prod.nombre}`,
+        estadoId: estadoProductoActivo.id
+      }
+    });
+
+    // Crear costo para cada producto (solo si no existe)
+    const costoExistente = await prisma.productoCosto.findFirst({
+      where: {
+        productoId: producto.id,
+        cantidadMin: 1
+      }
+    });
+
+    if (!costoExistente) {
+      await prisma.productoCosto.create({
+        data: {
+          productoId: producto.id,
+          precio: prod.precio,
+          cantidadMin: 1,
+          fechaInicio: new Date()
+        }
+      });
+    }
+  }
+
+  // 12. Tipos de Cliente
+  console.log('👤 Creando tipos de cliente...');
+  const tiposCliente = [
+    { nombre: 'Autor', descripcion: 'Autor de obra' },
+    { nombre: 'Compositor', descripcion: 'Compositor musical' },
+    { nombre: 'Intérprete', descripcion: 'Intérprete o ejecutante' },
+    { nombre: 'Editor', descripcion: 'Editor de obras' },
+    { nombre: 'Productor', descripcion: 'Productor' },
+    { nombre: 'Solicitante', descripcion: 'Solicitante general' }
+  ];
+
+  for (const tipo of tiposCliente) {
+    await prisma.clienteTipo.upsert({
+      where: { nombre: tipo.nombre },
+      update: {},
+      create: tipo
+    });
+  }
+
+  // 13. Nacionalidades
+  console.log('🌎 Creando nacionalidades...');
+  const nacionalidades = [
+    { nombre: 'Dominicana', codigo: 'DO' },
+    { nombre: 'Estadounidense', codigo: 'US' },
+    { nombre: 'Española', codigo: 'ES' },
+    { nombre: 'Mexicana', codigo: 'MX' },
+    { nombre: 'Otra', codigo: null }
+  ];
+
+  for (const nac of nacionalidades) {
+    await prisma.clienteNacionalidad.upsert({
+      where: { nombre: nac.nombre },
+      update: {},
+      create: nac
+    });
+  }
+
+  // 14. Obtener tipos de campo creados
+  console.log('📋 Obteniendo tipos de campo...');
+  const tipoTexto = await prisma.formularioCampoTipo.findUnique({ where: { nombre: 'texto' } });
+  const tipoNumerico = await prisma.formularioCampoTipo.findUnique({ where: { nombre: 'numerico' } });
+  const tipoFecha = await prisma.formularioCampoTipo.findUnique({ where: { nombre: 'fecha' } });
+  const tipoCheckbox = await prisma.formularioCampoTipo.findUnique({ where: { nombre: 'checkbox' } });
+
+  const tiposCampoCreados = {
+    'texto': tipoTexto,
+    'numerico': tipoNumerico,
+    'fecha': tipoFecha,
+    'checkbox': tipoCheckbox
+  };
+
+  // 15. Obtener productos creados
+  const productosCreados = await prisma.producto.findMany();
+
+  // 16. Campos Dinámicos para Productos - REPLICANDO EXACTAMENTE SIAONDA V1
+  console.log('✏️  Creando campos dinámicos basados en SIAONDA V1...');
+
+  // Verificar si ya existen campos
+  const camposExistentes = await prisma.formularioCampo.count();
+
+  if (camposExistentes === 0 && tipoTexto && tipoNumerico && tipoFecha && tipoCheckbox && tipoArchivo) {
+    const todosCampos: any[] = [];
+
+    // ============================================================================
+    // CAMPOS GLOBALES - De obra_generales.php de SIAONDA V1
+    // Aplican a TODOS los productos
+    // ============================================================================
+    todosCampos.push(
+      { productoId: null, campo: 'editor_divulgador', titulo: 'Nombre editor o divulgador (si es obra anónima)', tipoId: tipoTexto.id, requerido: false, orden: 1, activo: true },
+      { productoId: null, campo: 'titulo_obra', titulo: 'Título de la obra', tipoId: tipoTexto.id, requerido: true, orden: 2, activo: true },
+      { productoId: null, campo: 'obra_inedita', titulo: 'Obra Inédita', tipoId: tipoCheckbox.id, requerido: false, orden: 3, activo: true },
+      { productoId: null, campo: 'obra_publica', titulo: 'Obra Pública', tipoId: tipoCheckbox.id, requerido: false, orden: 4, activo: true },
+      { productoId: null, campo: 'fecha_1ra_publicacion', titulo: 'Fecha 1ra publicación', tipoId: tipoFecha.id, requerido: false, orden: 5, activo: true },
+      { productoId: null, campo: 'obra_originaria', titulo: 'Obra Originaria', tipoId: tipoCheckbox.id, requerido: false, orden: 6, activo: true },
+      { productoId: null, campo: 'obra_derivada', titulo: 'Obra derivada', tipoId: tipoCheckbox.id, requerido: false, orden: 7, activo: true },
+      { productoId: null, campo: 'obra_individual', titulo: 'Obra individual', tipoId: tipoCheckbox.id, requerido: false, orden: 8, activo: true },
+      { productoId: null, campo: 'obra_colectiva', titulo: 'Obra colectiva', tipoId: tipoCheckbox.id, requerido: false, orden: 9, activo: true },
+      { productoId: null, campo: 'obra_colaboracion', titulo: 'Obra colaboración', tipoId: tipoCheckbox.id, requerido: false, orden: 10, activo: true },
+      { productoId: null, campo: 'otro_dato', titulo: 'Cualquier otro dato para su identificación', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true },
+      { productoId: null, campo: 'pais_origen', titulo: 'País de origen obra', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true },
+      { productoId: null, campo: 'ano_realizacion', titulo: 'Año de su realización', tipoId: tipoNumerico.id, requerido: false, orden: 13, activo: true },
+      { productoId: null, campo: 'ano_1ra_publicacion', titulo: '1ra publicación: (si es el caso)', tipoId: tipoNumerico.id, requerido: false, orden: 14, activo: true },
+      { productoId: null, campo: 'titulo_original', titulo: 'Título de la obra en su idioma original: (En caso de que sea una traducción al castellano)', tipoId: tipoTexto.id, requerido: false, orden: 15, activo: true },
+      { productoId: null, campo: 'descripcion', titulo: 'Breve Descripción de la obra: (naturaleza y características)', tipoId: tipoTexto.id, requerido: false, orden: 16, activo: true }
+    );
+
+    // ============================================================================
+    // CAMPOS ESPECÍFICOS POR TIPO DE PRODUCTO (SIAONDA V1)
+    // ============================================================================
+
+    // ============================================================================
+    // OBRAS PLÁSTICAS/ARTES VISUALES - De obra_plastica.php de SIAONDA V1
+    // AP-01: Dibujo, AP-02: Fotografía, AP-03: Pintura, AP-04: Escultura, AP-05: Grabado
+    // ============================================================================
+    const productosPlasticos = ['AP-01', 'AP-02', 'AP-03', 'AP-04', 'AP-05'];
+    for (const codigo of productosPlasticos) {
+      const producto = productosCreados.find(p => p.codigo === codigo);
+      if (producto) {
+        todosCampos.push(
+          { productoId: producto.id, campo: 'descripcion_obra', titulo: 'Descripción de la obra', tipoId: tipoTexto.id, requerido: true, orden: 20, activo: true },
+          { productoId: producto.id, campo: 'ubicacion_obra', titulo: 'Ubicación de la obra', tipoId: tipoTexto.id, requerido: false, orden: 21, activo: true },
+          { productoId: producto.id, campo: 'datos_publicacion_exhibicion', titulo: 'Datos de su publicación, exhibición o ubicación', tipoId: tipoTexto.id, requerido: false, orden: 22, activo: true }
+        );
+      }
+    }
+
+    // ============================================================================
+    // OBRAS AUDIOVISUALES - De obra_audiovisual.php de SIAONDA V1
+    // AUD-01: Cinematográfica largo, AUD-02: Cinematográfica corto,
+    // AUD-03: Documental corto, AUD-04: Documental largo/Serie, AUD-05: Capítulo/Videoclip
+    // ============================================================================
+    const productosAudiovisuales = ['AUD-01', 'AUD-02', 'AUD-03', 'AUD-04', 'AUD-05'];
+    for (const codigo of productosAudiovisuales) {
+      const producto = productosCreados.find(p => p.codigo === codigo);
+      if (producto) {
+        todosCampos.push(
+          { productoId: producto.id, campo: 'autor_coautores', titulo: 'Nombre autor o coautores de la obra', tipoId: tipoTexto.id, requerido: true, orden: 20, activo: true },
+          { productoId: producto.id, campo: 'domicilio_autor', titulo: 'Domicilio del autor o coautores', tipoId: tipoTexto.id, requerido: false, orden: 21, activo: true },
+          { productoId: producto.id, campo: 'nombre_domicilio_productor', titulo: 'Nombre y Domicilio del Productor', tipoId: tipoTexto.id, requerido: false, orden: 22, activo: true },
+          { productoId: producto.id, campo: 'interpretes_principales', titulo: 'Nombre de los intérpretes principales', tipoId: tipoTexto.id, requerido: false, orden: 23, activo: true },
+          { productoId: producto.id, campo: 'otros_elementos_ficha_tecnica', titulo: 'Otros elementos de la ficha técnica', tipoId: tipoTexto.id, requerido: false, orden: 24, activo: true },
+          { productoId: producto.id, campo: 'pais_origen_publicacion', titulo: 'País de origen de la primera publicación', tipoId: tipoTexto.id, requerido: false, orden: 25, activo: true },
+          { productoId: producto.id, campo: 'ano', titulo: 'Año', tipoId: tipoNumerico.id, requerido: false, orden: 26, activo: true },
+          { productoId: producto.id, campo: 'breve_descripcion_argumento', titulo: 'Breve descripción del argumento', tipoId: tipoTexto.id, requerido: false, orden: 27, activo: true }
+        );
+      }
+    }
+
+    // ============================================================================
+    // OBRAS FONOGRÁFICAS - De obra_fonografica.php de SIAONDA V1
+    // MUS-03: Fonograma
+    // ============================================================================
+    const productoMUS03 = productosCreados.find(p => p.codigo === 'MUS-03');
+    if (productoMUS03) {
+      todosCampos.push(
+        { productoId: productoMUS03.id, campo: 'titulo_produccion', titulo: 'Título de la producción en su idioma original y de su traducción al castellano', tipoId: tipoTexto.id, requerido: true, orden: 20, activo: true },
+        { productoId: productoMUS03.id, campo: 'nombre_domicilio_productor', titulo: 'Nombre y domicilio del productor', tipoId: tipoTexto.id, requerido: true, orden: 21, activo: true },
+        { productoId: productoMUS03.id, campo: 'ano_fijacion', titulo: 'Año de la fijación', tipoId: tipoNumerico.id, requerido: false, orden: 22, activo: true },
+        { productoId: productoMUS03.id, campo: 'ano_1ra_publicacion_fono', titulo: 'Año de la 1ra publicación', tipoId: tipoNumerico.id, requerido: false, orden: 23, activo: true },
+        { productoId: productoMUS03.id, campo: 'titulos_obras_contenidas', titulo: 'Títulos de las obras contenidas en la producción y nombre de sus autores', tipoId: tipoTexto.id, requerido: false, orden: 24, activo: true },
+        { productoId: productoMUS03.id, campo: 'artistas_interpretes_ejecutantes', titulo: 'Nombre de los artistas, intérpretes o ejecutantes', tipoId: tipoTexto.id, requerido: false, orden: 25, activo: true }
+      );
+    }
+
+    // ============================================================================
+    // LETRA DE CANCIÓN - De formulario_letracacion.php de SIAONDA V1
+    // MUS-01: Obras Musicales con letra o sin ella / LIT-01: Letra para obra musical
+    // ============================================================================
+    const productosLetraCancion = ['MUS-01', 'LIT-01'];
+    for (const codigo of productosLetraCancion) {
+      const producto = productosCreados.find(p => p.codigo === codigo);
+      if (producto) {
+        todosCampos.push(
+          { productoId: producto.id, campo: 'letra_titulo', titulo: 'Título', tipoId: tipoTexto.id, requerido: true, orden: 20, activo: true },
+          { productoId: producto.id, campo: 'letra_traducciontitulo', titulo: 'Traducción Título', tipoId: tipoTexto.id, requerido: false, orden: 21, activo: true },
+          { productoId: producto.id, campo: 'letra_tituloorig', titulo: 'Título Original (si la obra es derivada)', tipoId: tipoTexto.id, requerido: false, orden: 22, activo: true },
+          { productoId: producto.id, campo: 'letra_descripcion', titulo: 'Breve Descripción', tipoId: tipoTexto.id, requerido: false, orden: 23, activo: true },
+          { productoId: producto.id, campo: 'letra_genero', titulo: 'Género', tipoId: tipoTexto.id, requerido: false, orden: 24, activo: true, descripcion: 'Moderno, Contemporáneo, Prosa, 3-4, Clásico' },
+          { productoId: producto.id, campo: 'letra_porigen', titulo: 'País de Origen', tipoId: tipoTexto.id, requerido: false, orden: 25, activo: true },
+          { productoId: producto.id, campo: 'letra_anocreacion', titulo: 'Año Creación', tipoId: tipoNumerico.id, requerido: false, orden: 26, activo: true },
+          { productoId: producto.id, campo: 'letra_archletra', titulo: 'Archivo Letra de la Canción', tipoId: tipoArchivo.id, requerido: false, orden: 27, activo: true }
+        );
+      }
+    }
+
+    // ============================================================================
+    // MELODÍA / ARREGLO MUSICAL - De formulario_melodia.php de SIAONDA V1
+    // MUS-02: Arreglo Musical
+    // ============================================================================
+    const productoMUS02 = productosCreados.find(p => p.codigo === 'MUS-02');
+    if (productoMUS02) {
+      todosCampos.push(
+        { productoId: productoMUS02.id, campo: 'melodia_titulo', titulo: 'Título', tipoId: tipoTexto.id, requerido: true, orden: 20, activo: true },
+        { productoId: productoMUS02.id, campo: 'melodia_genero', titulo: 'Género', tipoId: tipoTexto.id, requerido: false, orden: 21, activo: true, descripcion: 'Moderno, Contemporáneo, Prosa, 3-4, Clásico' },
+        { productoId: productoMUS02.id, campo: 'melodia_ritmo', titulo: 'Ritmo', tipoId: tipoTexto.id, requerido: false, orden: 22, activo: true, descripcion: 'Bachata, Merengue, Rock, Electro Pop, Balada' },
+        { productoId: productoMUS02.id, campo: 'melodia_porigen', titulo: 'País de Origen', tipoId: tipoTexto.id, requerido: false, orden: 23, activo: true },
+        { productoId: productoMUS02.id, campo: 'melodia_anocreacion', titulo: 'Año Creación', tipoId: tipoNumerico.id, requerido: false, orden: 24, activo: true },
+        { productoId: productoMUS02.id, campo: 'melodia_archpartitura', titulo: 'Archivo Partitura de la Canción', tipoId: tipoArchivo.id, requerido: false, orden: 25, activo: true },
+        { productoId: productoMUS02.id, campo: 'melodia_archmelodia', titulo: 'Archivo Melodía de la Canción', tipoId: tipoArchivo.id, requerido: false, orden: 26, activo: true }
+      );
+    }
+
+    // ============================================================================
+    // NOTA: Los demás productos (LIT-02, LIT-03, LIT-04, ESC-*, AA-*, OC-*) solo usan
+    // los campos globales de obra_generales.php ya que no tienen archivos específicos en SIAONDA V1
+    // ============================================================================
+        // Información de grabación comercial
+        { productoId: productoMUS01.id, campo: 'grabada_comercial', titulo: '¿Ha sido grabada con fines comerciales?', tipoId: tipoCheckbox.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoMUS01.id, campo: 'productor_fonografico', titulo: 'Nombre del productor fonográfico', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true },
+        { productoId: productoMUS01.id, campo: 'domicilio_productor', titulo: 'Domicilio', tipoId: tipoTexto.id, requerido: false, orden: 14, activo: true },
+        { productoId: productoMUS01.id, campo: 'editor_divulgador', titulo: 'Nombre del editor o divulgador (Si es una producción anónima)', tipoId: tipoTexto.id, requerido: false, orden: 15, activo: true },
+        { productoId: productoMUS01.id, campo: 'ano_grabacion', titulo: 'Año de su creación (grabación)', tipoId: tipoNumerico.id, requerido: false, orden: 16, activo: true }
+      );
+    }
+
+    // MUS-03: Fonograma (Formulario PDF Oficial ONDA - Producción de Fonogramas)
+    const productoMUS03 = productosCreados.find(p => p.codigo === 'MUS-03');
+    if (productoMUS03) {
+      todosCampos.push(
+        { productoId: productoMUS03.id, campo: 'genero', titulo: 'Género', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true },
+        { productoId: productoMUS03.id, campo: 'pais_origen_produccion', titulo: 'País de origen de la producción fonográfica', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoMUS03.id, campo: 'ano_fijacion', titulo: 'Año de la fijación', tipoId: tipoNumerico.id, requerido: true, orden: 12, activo: true },
+        { productoId: productoMUS03.id, campo: 'ano_primera_publicacion', titulo: 'Año de la primera publicación (Si es el caso)', tipoId: tipoNumerico.id, requerido: false, orden: 13, activo: true }
+      );
+    }
+
+    // AUD-01: Obras Audiovisuales (Formulario PDF Oficial ONDA)
+    const productoAUD01 = productosCreados.find(p => p.codigo === 'AUD-01');
+    if (productoAUD01) {
+      todosCampos.push(
+        // Sección 3: Nombre de intérpretes principales
+        { productoId: productoAUD01.id, campo: 'interpretes_principales', titulo: 'Nombre de intérpretes principales', tipoId: tipoTexto.id, requerido: false, orden: 10, activo: true, descripcion: 'Separar los nombres por comas' },
+        // Sección 4: Elementos extra de la ficha técnica
+        { productoId: productoAUD01.id, campo: 'ficha_tecnica_extra', titulo: 'Elementos extra de la ficha técnica', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true },
+        // Sección 6: Indique si es
+        { productoId: productoAUD01.id, campo: 'tipo_obra', titulo: 'Tipo de obra', tipoId: tipoTexto.id, requerido: true, orden: 12, activo: true, descripcion: 'Cinematográfica, Videoclip, Serie, Dibujos animados, Documental, Otro' },
+        { productoId: productoAUD01.id, campo: 'genero', titulo: 'Género', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true, descripcion: 'Acción, Educativo, Musical, Ciencia ficción, Aventura, Terror, Promoción, Romántico, Comedia, Drama, Épico, Otro' },
+        { productoId: productoAUD01.id, campo: 'categoria', titulo: 'Categoría o clasificación', tipoId: tipoTexto.id, requerido: false, orden: 14, activo: true, descripcion: 'Cortometraje, Mediometraje, Largometraje' },
+        { productoId: productoAUD01.id, campo: 'fecha_terminacion', titulo: 'Fecha de terminación o creación', tipoId: tipoFecha.id, requerido: true, orden: 15, activo: true },
+        { productoId: productoAUD01.id, campo: 'fecha_publicacion', titulo: 'Fecha de Publicación (Si es el caso)', tipoId: tipoFecha.id, requerido: false, orden: 16, activo: true },
+        { productoId: productoAUD01.id, campo: 'duracion_obra', titulo: 'Duración de la obra', tipoId: tipoTexto.id, requerido: false, orden: 17, activo: true },
+        { productoId: productoAUD01.id, campo: 'sinopsis_argumento', titulo: 'Breve sinopsis del argumento', tipoId: tipoTexto.id, requerido: false, orden: 18, activo: true }
+      );
+    }
+
+    // ESC-01: Obras Escénicas (Formulario PDF Oficial ONDA)
+    const productoESC01 = productosCreados.find(p => p.codigo === 'ESC-01');
+    if (productoESC01) {
+      todosCampos.push(
+        // Sección 2: Datos generales de la obra
+        { productoId: productoESC01.id, campo: 'titulo_nombre_original', titulo: 'Título o nombre de la (s) obra (s) originales o eventos', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true },
+        // Sección 3: Indique si es
+        { productoId: productoESC01.id, campo: 'tipo_obra_escenica', titulo: 'Tipo de obra escénica', tipoId: tipoTexto.id, requerido: true, orden: 11, activo: true, descripcion: 'Obra de teatro, Obra de teatro musical, Obra coreográfica, Concierto y/o espectáculo, Pantomima, Monólogo, Escenografía, Otro' },
+        // Sección 5: Obras derivadas
+        { productoId: productoESC01.id, campo: 'genero', titulo: 'Género', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoESC01.id, campo: 'descripcion_escenografia', titulo: 'Breve descripción de la escenografía de acuerdo a su naturaleza o características', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true }
+      );
+    }
+
+    // LIT-03: Obras Literarias (Formulario PDF Oficial ONDA)
+    const productoLIT03 = productosCreados.find(p => p.codigo === 'LIT-03');
+    if (productoLIT03) {
+      todosCampos.push(
+        // Sección 3: Indique si es
+        { productoId: productoLIT03.id, campo: 'tipo_obra_literaria', titulo: 'Tipo de obra literaria', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Libro, Letra para una canción, Revista, Conferencia, Folleto, Agenda, Sermón, Guion cinematográfico, Guion audiovisual, Personaje, Guion o libreto de humor, Guion obra de teatro, Guion obra de teatro musical, Guion para concierto y/o espectáculo, Poema, Tesis, Seudónimo de autor, Libro electrónico, Audiolibro, Libro Braille, Otro' },
+        // Sección 4: Carácter de la (s) obra (s)
+        { productoId: productoLIT03.id, campo: 'caracter_obra', titulo: 'Carácter de la obra', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true, descripcion: 'Inédita, Publicada, Originaria, Derivada, Individual' },
+        { productoId: productoLIT03.id, campo: 'fecha_primera_publicacion', titulo: 'Fecha de la 1ra. publicación (Si es el caso)', tipoId: tipoFecha.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoLIT03.id, campo: 'ano_publicacion_grafica', titulo: 'Si estuviere editada en forma gráfica, indicar el año publicación', tipoId: tipoNumerico.id, requerido: false, orden: 13, activo: true },
+        { productoId: productoLIT03.id, campo: 'numero_edicion', titulo: 'Número edición', tipoId: tipoNumerico.id, requerido: false, orden: 14, activo: true },
+        { productoId: productoLIT03.id, campo: 'ejemplares_existencia', titulo: 'Cantidad de ejemplares en existencia (Si es el caso)', tipoId: tipoNumerico.id, requerido: false, orden: 15, activo: true },
+        // Sección 5: Obras derivadas
+        { productoId: productoLIT03.id, campo: 'genero', titulo: 'Género', tipoId: tipoTexto.id, requerido: false, orden: 16, activo: true },
+        { productoId: productoLIT03.id, campo: 'categoria', titulo: 'Categoría', tipoId: tipoTexto.id, requerido: false, orden: 17, activo: true }
+      );
+    }
+
+    // OBRAS PLÁSTICAS / BELLAS ARTES (AP-01 a AP-05)
+    // AP-01: Dibujo
+    const productoAP01 = productosCreados.find(p => p.codigo === 'AP-01');
+    if (productoAP01) {
+      todosCampos.push(
+        { productoId: productoAP01.id, campo: 'tecnica', titulo: 'Técnica utilizada', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Grafito, carboncillo, tinta, etc.' },
+        { productoId: productoAP01.id, campo: 'dimensiones', titulo: 'Dimensiones (alto x ancho en cm)', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoAP01.id, campo: 'soporte', titulo: 'Soporte', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true, descripcion: 'Papel, cartón, lienzo, etc.' },
+        { productoId: productoAP01.id, campo: 'ubicacion', titulo: 'Ubicación de la obra', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true },
+        { productoId: productoAP01.id, campo: 'datos_exhibicion', titulo: 'Datos de su publicación, exhibición o ubicación', tipoId: tipoTexto.id, requerido: false, orden: 14, activo: true }
+      );
+    }
+
+    // AP-02: Fotografía
+    const productoAP02 = productosCreados.find(p => p.codigo === 'AP-02');
+    if (productoAP02) {
+      todosCampos.push(
+        { productoId: productoAP02.id, campo: 'tecnica_fotografica', titulo: 'Técnica fotográfica', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Digital, analógica, etc.' },
+        { productoId: productoAP02.id, campo: 'dimensiones', titulo: 'Dimensiones (alto x ancho en cm)', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoAP02.id, campo: 'fecha_captura', titulo: 'Fecha de captura', tipoId: tipoFecha.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoAP02.id, campo: 'resolucion', titulo: 'Resolución (si es digital)', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true },
+        { productoId: productoAP02.id, campo: 'ubicacion', titulo: 'Ubicación de la obra', tipoId: tipoTexto.id, requerido: false, orden: 14, activo: true },
+        { productoId: productoAP02.id, campo: 'datos_exhibicion', titulo: 'Datos de su publicación, exhibición o ubicación', tipoId: tipoTexto.id, requerido: false, orden: 15, activo: true }
+      );
+    }
+
+    // AP-03: Pintura
+    const productoAP03 = productosCreados.find(p => p.codigo === 'AP-03');
+    if (productoAP03) {
+      todosCampos.push(
+        { productoId: productoAP03.id, campo: 'tecnica', titulo: 'Técnica utilizada', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Óleo, acrílico, acuarela, etc.' },
+        { productoId: productoAP03.id, campo: 'dimensiones', titulo: 'Dimensiones (alto x ancho en cm)', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoAP03.id, campo: 'soporte', titulo: 'Soporte', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true, descripcion: 'Lienzo, madera, metal, etc.' },
+        { productoId: productoAP03.id, campo: 'ubicacion', titulo: 'Ubicación de la obra', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true },
+        { productoId: productoAP03.id, campo: 'datos_exhibicion', titulo: 'Datos de su publicación, exhibición o ubicación', tipoId: tipoTexto.id, requerido: false, orden: 14, activo: true }
+      );
+    }
+
+    // AP-04: Escultura
+    const productoAP04 = productosCreados.find(p => p.codigo === 'AP-04');
+    if (productoAP04) {
+      todosCampos.push(
+        { productoId: productoAP04.id, campo: 'tecnica', titulo: 'Técnica utilizada', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Tallado, modelado, fundición, etc.' },
+        { productoId: productoAP04.id, campo: 'material', titulo: 'Material', tipoId: tipoTexto.id, requerido: true, orden: 11, activo: true, descripcion: 'Bronce, mármol, madera, arcilla, etc.' },
+        { productoId: productoAP04.id, campo: 'dimensiones', titulo: 'Dimensiones (alto x ancho x profundo en cm)', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoAP04.id, campo: 'peso', titulo: 'Peso aproximado (kg)', tipoId: tipoNumerico.id, requerido: false, orden: 13, activo: true },
+        { productoId: productoAP04.id, campo: 'ubicacion', titulo: 'Ubicación de la obra', tipoId: tipoTexto.id, requerido: false, orden: 14, activo: true },
+        { productoId: productoAP04.id, campo: 'datos_exhibicion', titulo: 'Datos de su publicación, exhibición o ubicación', tipoId: tipoTexto.id, requerido: false, orden: 15, activo: true }
+      );
+    }
+
+    // AP-05: Grabado
+    const productoAP05 = productosCreados.find(p => p.codigo === 'AP-05');
+    if (productoAP05) {
+      todosCampos.push(
+        { productoId: productoAP05.id, campo: 'tecnica', titulo: 'Técnica de grabado', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Xilografía, litografía, serigrafía, etc.' },
+        { productoId: productoAP05.id, campo: 'edicion_numero', titulo: 'Número de edición', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true, descripcion: 'Ej: 5/100' },
+        { productoId: productoAP05.id, campo: 'tiraje_total', titulo: 'Tiraje total', tipoId: tipoNumerico.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoAP05.id, campo: 'dimensiones', titulo: 'Dimensiones (alto x ancho en cm)', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true },
+        { productoId: productoAP05.id, campo: 'ubicacion', titulo: 'Ubicación de la obra', tipoId: tipoTexto.id, requerido: false, orden: 14, activo: true },
+        { productoId: productoAP05.id, campo: 'datos_exhibicion', titulo: 'Datos de su publicación, exhibición o ubicación', tipoId: tipoTexto.id, requerido: false, orden: 15, activo: true }
+      );
+    }
+
+    // ARTES APLICADAS (AA-01 a AA-08)
+    // AA-01: Diseño del espacio
+    const productoAA01 = productosCreados.find(p => p.codigo === 'AA-01');
+    if (productoAA01) {
+      todosCampos.push(
+        { productoId: productoAA01.id, campo: 'tipo_diseno', titulo: 'Tipo de diseño', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Arquitectura de interiores, paisajismo, urbanismo' },
+        { productoId: productoAA01.id, campo: 'ubicacion_proyecto', titulo: 'Ubicación del proyecto', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoAA01.id, campo: 'area_metros', titulo: 'Área en metros cuadrados', tipoId: tipoNumerico.id, requerido: false, orden: 12, activo: true }
+      );
+    }
+
+    // AA-02: Diseño textil
+    const productoAA02 = productosCreados.find(p => p.codigo === 'AA-02');
+    if (productoAA02) {
+      todosCampos.push(
+        { productoId: productoAA02.id, campo: 'tipo_diseno', titulo: 'Tipo de diseño textil', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Ropa, vestuario, accesorios' },
+        { productoId: productoAA02.id, campo: 'coleccion', titulo: 'Nombre de la colección (si aplica)', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoAA02.id, campo: 'num_piezas', titulo: 'Número de piezas', tipoId: tipoNumerico.id, requerido: false, orden: 12, activo: true }
+      );
+    }
+
+    // AA-03: Diseño de productos
+    const productoAA03 = productosCreados.find(p => p.codigo === 'AA-03');
+    if (productoAA03) {
+      todosCampos.push(
+        { productoId: productoAA03.id, campo: 'tipo_producto', titulo: 'Tipo de producto', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Mobiliario, objeto industrial, etc.' },
+        { productoId: productoAA03.id, campo: 'materiales', titulo: 'Materiales utilizados', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoAA03.id, campo: 'dimensiones', titulo: 'Dimensiones del producto', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true }
+      );
+    }
+
+    // AA-04: Diseño de comunicación
+    const productoAA04 = productosCreados.find(p => p.codigo === 'AA-04');
+    if (productoAA04) {
+      todosCampos.push(
+        { productoId: productoAA04.id, campo: 'tipo_diseno', titulo: 'Tipo de diseño', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Gráfico, publicidad, multimedia' },
+        { productoId: productoAA04.id, campo: 'medio_aplicacion', titulo: 'Medio de aplicación', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true, descripcion: 'Digital, impreso, audiovisual' },
+        { productoId: productoAA04.id, campo: 'formato', titulo: 'Formato', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true }
+      );
+    }
+
+    // MUS-02: Arreglo Musical (campos específicos)
+    const productoMUS02 = productosCreados.find(p => p.codigo === 'MUS-02');
+    if (productoMUS02) {
+      todosCampos.push(
+        { productoId: productoMUS02.id, campo: 'nombre_autor_original', titulo: 'Nombre del autor (obra original)', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Separar por comas si son varios' },
+        { productoId: productoMUS02.id, campo: 'nombre_arreglista', titulo: 'Nombre del arreglista', tipoId: tipoTexto.id, requerido: true, orden: 11, activo: true },
+        { productoId: productoMUS02.id, campo: 'genero_musical', titulo: 'Género musical', tipoId: tipoTexto.id, requerido: true, orden: 12, activo: true },
+        { productoId: productoMUS02.id, campo: 'ritmo_forma', titulo: 'Ritmo/Forma musical', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true }
+      );
+    }
+
+    // MUS-04: Interpretaciones o Ejecuciones Musicales
+    const productoMUS04 = productosCreados.find(p => p.codigo === 'MUS-04');
+    if (productoMUS04) {
+      todosCampos.push(
+        { productoId: productoMUS04.id, campo: 'nombre_interpretes', titulo: 'Nombre de los intérpretes y ejecutantes', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Separar por comas' },
+        { productoId: productoMUS04.id, campo: 'agrupacion', titulo: 'Si es una agrupación, indicar nombre y director', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoMUS04.id, campo: 'obras_interpretadas', titulo: 'Obras interpretadas y nombre de sus autores', tipoId: tipoTexto.id, requerido: true, orden: 12, activo: true },
+        { productoId: productoMUS04.id, campo: 'ano_realizacion', titulo: 'Año de realización', tipoId: tipoNumerico.id, requerido: true, orden: 13, activo: true },
+        { productoId: productoMUS04.id, campo: 'datos_fijacion', titulo: 'Año y datos de la fijación o primera publicación', tipoId: tipoTexto.id, requerido: false, orden: 14, activo: true }
+      );
+    }
+
+    // MUS-05: Emisiones de Radiodifusión
+    const productoMUS05 = productosCreados.find(p => p.codigo === 'MUS-05');
+    if (productoMUS05) {
+      todosCampos.push(
+        { productoId: productoMUS05.id, campo: 'organismo_radiodifusion', titulo: 'Identificación y dirección del organismo de radiodifusión', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true },
+        { productoId: productoMUS05.id, campo: 'obras_programas', titulo: 'Obras, programas o producciones contenidas', tipoId: tipoTexto.id, requerido: true, orden: 11, activo: true },
+        { productoId: productoMUS05.id, campo: 'lugar_fecha_transmision', titulo: 'Lugar y fecha de la transmisión', tipoId: tipoTexto.id, requerido: true, orden: 12, activo: true },
+        { productoId: productoMUS05.id, campo: 'ano_1ra_publicacion', titulo: 'Si está fijada en soporte sonoro o audiovisual, año de la 1ra publicación', tipoId: tipoNumerico.id, requerido: false, orden: 13, activo: true }
+      );
+    }
+
+    // OBRAS LITERARIAS ADICIONALES
+    // LIT-01: Letra para una obra musical
+    const productoLIT01 = productosCreados.find(p => p.codigo === 'LIT-01');
+    if (productoLIT01) {
+      todosCampos.push(
+        { productoId: productoLIT01.id, campo: 'titulo_cancion', titulo: 'Título de la canción', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true },
+        { productoId: productoLIT01.id, campo: 'idioma', titulo: 'Idioma', tipoId: tipoTexto.id, requerido: true, orden: 11, activo: true },
+        { productoId: productoLIT01.id, campo: 'primera_estrofa', titulo: 'Primera estrofa', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoLIT01.id, campo: 'coro', titulo: 'Coro/Estribillo', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true }
+      );
+    }
+
+    // LIT-02: Poema
+    const productoLIT02 = productosCreados.find(p => p.codigo === 'LIT-02');
+    if (productoLIT02) {
+      todosCampos.push(
+        { productoId: productoLIT02.id, campo: 'genero_literario', titulo: 'Género literario', tipoId: tipoTexto.id, requerido: false, orden: 10, activo: true },
+        { productoId: productoLIT02.id, campo: 'num_versos', titulo: 'Número de versos', tipoId: tipoNumerico.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoLIT02.id, campo: 'metrica', titulo: 'Métrica', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true }
+      );
+    }
+
+    // LIT-09: Guión Cinematográfico
+    const productoLIT09 = productosCreados.find(p => p.codigo === 'LIT-09');
+    if (productoLIT09) {
+      todosCampos.push(
+        { productoId: productoLIT09.id, campo: 'tipo_guion', titulo: 'Tipo de guión', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Cinematográfico, Documental, Serie' },
+        { productoId: productoLIT09.id, campo: 'duracion_estimada', titulo: 'Duración estimada (minutos)', tipoId: tipoNumerico.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoLIT09.id, campo: 'num_escenas', titulo: 'Número de escenas', tipoId: tipoNumerico.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoLIT09.id, campo: 'sinopsis', titulo: 'Sinopsis breve', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true }
+      );
+    }
+
+    // LIT-14: Guión para Obra de Teatro
+    const productoLIT14 = productosCreados.find(p => p.codigo === 'LIT-14');
+    if (productoLIT14) {
+      todosCampos.push(
+        { productoId: productoLIT14.id, campo: 'genero_teatral', titulo: 'Género teatral', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true },
+        { productoId: productoLIT14.id, campo: 'num_actos', titulo: 'Número de actos', tipoId: tipoNumerico.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoLIT14.id, campo: 'num_personajes', titulo: 'Número de personajes', tipoId: tipoNumerico.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoLIT14.id, campo: 'duracion_estimada', titulo: 'Duración estimada (minutos)', tipoId: tipoNumerico.id, requerido: false, orden: 13, activo: true }
+      );
+    }
+
+    // LIT-15: Personaje
+    const productoLIT15 = productosCreados.find(p => p.codigo === 'LIT-15');
+    if (productoLIT15) {
+      todosCampos.push(
+        { productoId: productoLIT15.id, campo: 'nombre_personaje', titulo: 'Nombre del personaje', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true },
+        { productoId: productoLIT15.id, campo: 'tipo_personaje', titulo: 'Tipo de personaje', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true, descripcion: 'Literario, cómic, animación, videojuego' },
+        { productoId: productoLIT15.id, campo: 'caracteristicas', titulo: 'Características principales', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoLIT15.id, campo: 'contexto_uso', titulo: 'Contexto de uso', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true }
+      );
+    }
+
+    // LIT-17: Tesis, Monográfico o Anteproyecto
+    const productoLIT17 = productosCreados.find(p => p.codigo === 'LIT-17');
+    if (productoLIT17) {
+      todosCampos.push(
+        { productoId: productoLIT17.id, campo: 'institucion', titulo: 'Institución académica', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true },
+        { productoId: productoLIT17.id, campo: 'carrera', titulo: 'Carrera o programa', tipoId: tipoTexto.id, requerido: true, orden: 11, activo: true },
+        { productoId: productoLIT17.id, campo: 'ano_presentacion', titulo: 'Año de presentación', tipoId: tipoNumerico.id, requerido: true, orden: 12, activo: true },
+        { productoId: productoLIT17.id, campo: 'num_paginas', titulo: 'Número de páginas', tipoId: tipoNumerico.id, requerido: false, orden: 13, activo: true },
+        { productoId: productoLIT17.id, campo: 'tutor', titulo: 'Nombre del tutor/asesor', tipoId: tipoTexto.id, requerido: false, orden: 14, activo: true }
+      );
+    }
+
+    // OBRAS CIENTÍFICAS ADICIONALES
+    // OC-03: Obra o Proyecto de Ingeniería
+    const productoOC03 = productosCreados.find(p => p.codigo === 'OC-03');
+    if (productoOC03) {
+      todosCampos.push(
+        { productoId: productoOC03.id, campo: 'tipo_proyecto', titulo: 'Tipo de proyecto de ingeniería', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true },
+        { productoId: productoOC03.id, campo: 'especialidad', titulo: 'Especialidad de ingeniería', tipoId: tipoTexto.id, requerido: true, orden: 11, activo: true, descripcion: 'Civil, Eléctrica, Mecánica, Industrial, etc.' },
+        { productoId: productoOC03.id, campo: 'ubicacion_proyecto', titulo: 'Ubicación del proyecto', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoOC03.id, campo: 'ano_proyecto', titulo: 'Año del proyecto', tipoId: tipoNumerico.id, requerido: true, orden: 13, activo: true }
+      );
+    }
+
+    // OC-07: Página Web/Multimedia
+    const productoOC07 = productosCreados.find(p => p.codigo === 'OC-07');
+    if (productoOC07) {
+      todosCampos.push(
+        { productoId: productoOC07.id, campo: 'url', titulo: 'URL del sitio web', tipoId: tipoTexto.id, requerido: false, orden: 10, activo: true },
+        { productoId: productoOC07.id, campo: 'tipo_sitio', titulo: 'Tipo de sitio', tipoId: tipoTexto.id, requerido: true, orden: 11, activo: true, descripcion: 'Web, App móvil, Multimedia interactiva' },
+        { productoId: productoOC07.id, campo: 'tecnologias', titulo: 'Tecnologías utilizadas', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoOC07.id, campo: 'funcionalidad', titulo: 'Funcionalidad principal', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true }
+      );
+    }
+
+    // AUDIOVISUALES ADICIONALES
+    // AUD-02: Obra Cinematográfica (corto metraje)
+    const productoAUD02 = productosCreados.find(p => p.codigo === 'AUD-02');
+    if (productoAUD02) {
+      todosCampos.push(
+        { productoId: productoAUD02.id, campo: 'interpretes_principales', titulo: 'Nombre de intérpretes principales', tipoId: tipoTexto.id, requerido: false, orden: 10, activo: true, descripcion: 'Separar por comas' },
+        { productoId: productoAUD02.id, campo: 'genero', titulo: 'Género', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoAUD02.id, campo: 'duracion_minutos', titulo: 'Duración (minutos)', tipoId: tipoNumerico.id, requerido: true, orden: 12, activo: true },
+        { productoId: productoAUD02.id, campo: 'fecha_terminacion', titulo: 'Fecha de terminación', tipoId: tipoFecha.id, requerido: true, orden: 13, activo: true },
+        { productoId: productoAUD02.id, campo: 'sinopsis', titulo: 'Breve sinopsis', tipoId: tipoTexto.id, requerido: false, orden: 14, activo: true }
+      );
+    }
+
+    // AUD-03, AUD-04, AUD-05 (Documentales, Series, Videoclips) - campos similares
+    const productosAudiovisuales = ['AUD-03', 'AUD-04', 'AUD-05'];
+    for (const codigo of productosAudiovisuales) {
+      const producto = productosCreados.find(p => p.codigo === codigo);
+      if (producto) {
+        todosCampos.push(
+          { productoId: producto.id, campo: 'tipo_produccion', titulo: 'Tipo de producción', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true },
+          { productoId: producto.id, campo: 'duracion_minutos', titulo: 'Duración (minutos)', tipoId: tipoNumerico.id, requerido: false, orden: 11, activo: true },
+          { productoId: producto.id, campo: 'fecha_terminacion', titulo: 'Fecha de terminación', tipoId: tipoFecha.id, requerido: true, orden: 12, activo: true },
+          { productoId: producto.id, campo: 'sinopsis', titulo: 'Breve sinopsis o descripción', tipoId: tipoTexto.id, requerido: false, orden: 13, activo: true }
+        );
+      }
+    }
+
+    // OBRAS ESCÉNICAS ADICIONALES (ESC-03 a ESC-07)
+    const productosEscenicos = [
+      { codigo: 'ESC-03', tipo: 'Concierto y/o Espectáculo' },
+      { codigo: 'ESC-04', tipo: 'Escenografía' },
+      { codigo: 'ESC-05', tipo: 'Obra coreográfica' },
+      { codigo: 'ESC-06', tipo: 'Monólogo' },
+      { codigo: 'ESC-07', tipo: 'Pantomima' }
+    ];
+
+    for (const item of productosEscenicos) {
+      const producto = productosCreados.find(p => p.codigo === item.codigo);
+      if (producto) {
+        todosCampos.push(
+          { productoId: producto.id, campo: 'genero', titulo: 'Género', tipoId: tipoTexto.id, requerido: false, orden: 10, activo: true },
+          { productoId: producto.id, campo: 'duracion_minutos', titulo: 'Duración aproximada (minutos)', tipoId: tipoNumerico.id, requerido: false, orden: 11, activo: true },
+          { productoId: producto.id, campo: 'descripcion_obra', titulo: 'Breve descripción de acuerdo a su naturaleza o características', tipoId: tipoTexto.id, requerido: false, orden: 12, activo: true }
+        );
+      }
+    }
+
+    // ARTES APLICADAS ADICIONALES (AA-05 a AA-08)
+    // Según el formulario oficial de Artes Aplicadas, todas las categorías comparten los mismos campos generales
+    const productosArtesAplicadasAdicionales = ['AA-05', 'AA-06', 'AA-07', 'AA-08'];
+
+    for (const codigo of productosArtesAplicadasAdicionales) {
+      const producto = productosCreados.find(p => p.codigo === codigo);
+      if (producto) {
+        todosCampos.push(
+          { productoId: producto.id, campo: 'genero', titulo: 'Género', tipoId: tipoTexto.id, requerido: false, orden: 10, activo: true },
+          { productoId: producto.id, campo: 'categoria_obra', titulo: 'Categoría de la obra', tipoId: tipoTexto.id, requerido: false, orden: 11, activo: true }
+        );
+      }
+    }
+
+    // LIT-04 Libro electrónico - Comparte los mismos campos que LIT-03 Libro
+    const productoLIT04 = productosCreados.find(p => p.codigo === 'LIT-04');
+    const productoLIT03 = productosCreados.find(p => p.codigo === 'LIT-03');
+    if (productoLIT04 && productoLIT03) {
+      // Copiamos los mismos campos de LIT-03 para LIT-04
+      todosCampos.push(
+        { productoId: productoLIT04.id, campo: 'inedita_publicada', titulo: '¿Es inédita o publicada?', tipoId: tipoTexto.id, requerido: true, orden: 10, activo: true, descripcion: 'Inédita / Publicada' },
+        { productoId: productoLIT04.id, campo: 'fecha_primera_publicacion', titulo: 'Fecha de la primera publicación (Si es el caso)', tipoId: tipoFecha.id, requerido: false, orden: 11, activo: true },
+        { productoId: productoLIT04.id, campo: 'ano_publicacion', titulo: 'Año de publicación (Si estuviere editada en forma gráfica)', tipoId: tipoNumerico.id, requerido: false, orden: 12, activo: true },
+        { productoId: productoLIT04.id, campo: 'numero_edicion', titulo: 'Número de edición', tipoId: tipoNumerico.id, requerido: false, orden: 13, activo: true },
+        { productoId: productoLIT04.id, campo: 'cantidad_ejemplares', titulo: 'Cantidad de ejemplares en existencia (Si es el caso)', tipoId: tipoNumerico.id, requerido: false, orden: 14, activo: true },
+        { productoId: productoLIT04.id, campo: 'isbn', titulo: 'ISBN', tipoId: tipoTexto.id, requerido: false, orden: 15, activo: true },
+        { productoId: productoLIT04.id, campo: 'editorial', titulo: 'Editorial', tipoId: tipoTexto.id, requerido: false, orden: 16, activo: true },
+        { productoId: productoLIT04.id, campo: 'num_paginas', titulo: 'Número de páginas', tipoId: tipoNumerico.id, requerido: false, orden: 17, activo: true },
+        { productoId: productoLIT04.id, campo: 'formato_digital', titulo: 'Formato digital', tipoId: tipoTexto.id, requerido: false, orden: 18, activo: true, descripcion: 'PDF, EPUB, MOBI, etc.' }
+      );
+    }
+
+    await prisma.formularioCampo.createMany({
+      data: todosCampos,
+      skipDuplicates: true
+    });
+
+    console.log(`✅ Creados ${todosCampos.length} campos dinámicos para TODOS los tipos de obras`);
+  } else {
+    console.log('⏭️  Campos dinámicos ya existen, saltando...');
+  }
+
+  console.log('✅ Seeds completados exitosamente!');
+  console.log('\n📌 Usuario administrador creado:');
+  console.log('   Usuario: admin');
+  console.log('   Contraseña: admin123');
+  console.log('\n📦 Productos creados:', productosCreados.length);
+  console.log('\n⚠️  IMPORTANTE: Cambia la contraseña en producción!\n');
+}
+
+main()
+  .catch((e) => {
+    console.error('❌ Error ejecutando seeds:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

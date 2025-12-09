@@ -17,21 +17,20 @@ const createFormularioSchema = z.object({
   })),
   clientes: z.array(z.object({
     clienteId: z.number().int().positive(),
-    tipoRelacion: z.string()
+    tipoRelacion: z.string().default('Autor')
   })),
   firma: z.string().optional(),
   observaciones: z.string().optional()
 });
 
-// Generar código único de formulario: 8 dígitos + /DD/MM/YYYY
+// Generar código único de formulario: 8 dígitos + /MM/YYYY
 const generateCodigoFormulario = async (): Promise<string> => {
   const now = new Date();
   const count = await prisma.formulario.count();
   const numero = (count + 1).toString().padStart(8, '0');
-  const dia = now.getDate().toString().padStart(2, '0');
   const mes = (now.getMonth() + 1).toString().padStart(2, '0');
   const año = now.getFullYear();
-  return `${numero}/${dia}/${mes}/${año}`;
+  return `${numero}/${mes}/${año}`;
 };
 
 // GET /api/formularios
@@ -90,7 +89,20 @@ export const getFormularios = asyncHandler(async (req: Request, res: Response) =
                 nombre: true,
                 categoria: true
               }
+            },
+            campos: {
+              include: {
+                campo: true
+              }
             }
+          }
+        },
+        factura: {
+          select: {
+            id: true,
+            codigo: true,
+            total: true,
+            estado: true
           }
         },
         _count: {
@@ -171,6 +183,20 @@ export const getFormulario = asyncHandler(async (req: Request, res: Response) =>
         include: {
           estado: true
         }
+      },
+      solicitudIrc: {
+        include: {
+          estado: true,
+          empresa: true,
+          certificado: true,
+          categoriaIrc: true, // Importante para mostrar en la UI
+          recibidoPor: {
+            select: {
+              id: true,
+              nombrecompleto: true
+            }
+          }
+        }
       }
     }
   });
@@ -248,6 +274,100 @@ export const createFormulario = asyncHandler(async (req: AuthRequest, res: Respo
       }
     }
 
+    // 🔗 WEBHOOK: Si el formulario es de tipo IRC, crear automáticamente la solicitud de Inspectoría
+    const productosFormulario = await tx.formularioProducto.findMany({
+      where: { formularioId: nuevoFormulario.id },
+      include: { producto: true }
+    });
+
+    const tieneProductoIRC = productosFormulario.some(fp => fp.producto.codigo === 'IRC-01');
+
+    if (tieneProductoIRC) {
+      // Obtener datos del formulario para crear la solicitud IRC
+      const productosConCampos = await tx.formularioProducto.findMany({
+        where: {
+          formularioId: nuevoFormulario.id,
+          producto: { codigo: 'IRC-01' }
+        },
+        include: {
+          campos: {
+            include: { campo: true }
+          }
+        }
+      });
+
+      const productoCampos = productosConCampos[0]?.campos || [];
+      const getCampoValor = (nombreCampo: string) =>
+        productoCampos.find(c => c.campo.campo === nombreCampo)?.valor;
+
+      const tipoSolicitud = getCampoValor('tipoSolicitud') || 'REGISTRO_NUEVO';
+      const nombreEmpresa = getCampoValor('nombreEmpresa');
+      const nombreComercial = getCampoValor('nombreComercial');
+      const rnc = getCampoValor('rnc');
+      const categoriaIrcNombre = getCampoValor('categoriaIrc');
+      const direccion = getCampoValor('direccion');
+      const telefono = getCampoValor('telefono');
+      const email = getCampoValor('email') || 'sin-email@onda.gob.do';
+      const representanteLegal = getCampoValor('representanteLegal');
+      const cedulaRepresentante = getCampoValor('cedulaRepresentante');
+      const tipoPersona = getCampoValor('tipoPersona') || 'MORAL';
+      const descripcionActividades = getCampoValor('descripcionActividades') || 'Sin descripción';
+
+      if (!nombreEmpresa || !rnc || !categoriaIrcNombre || !tipoPersona) {
+        throw new AppError('Datos incompletos para crear solicitud IRC', 400);
+      }
+
+      // Buscar categoría IRC por nombre
+      const categoriaIrc = await tx.categoriaIrc.findFirst({
+        where: {
+          nombre: { contains: categoriaIrcNombre, mode: 'insensitive' }
+        }
+      });
+
+      if (!categoriaIrc) {
+        throw new AppError(`Categoría IRC "${categoriaIrcNombre}" no encontrada`, 400);
+      }
+
+      // Generar código de solicitud
+      const year = new Date().getFullYear();
+      const count = await tx.solicitudRegistroInspeccion.count({
+        where: {
+          codigo: { startsWith: `SOL-INSP-${year}` }
+        }
+      });
+      const codigoSolicitud = `SOL-INSP-${year}-${(count + 1).toString().padStart(4, '0')}`;
+
+      // Obtener estado inicial "PENDIENTE"
+      const estadoPendiente = await tx.estadoSolicitudInspeccion.findFirst({
+        where: { nombre: 'PENDIENTE' }
+      });
+
+      // Crear solicitud de inspectoría (SIN crear EmpresaInspeccionada aún)
+      // La empresa se crea DESPUÉS cuando el inspector apruebe la solicitud
+      const solicitud = await tx.solicitudRegistroInspeccion.create({
+        data: {
+          codigo: codigoSolicitud,
+          empresaId: null, // No hay empresa aún, se creará al aprobar
+          tipoSolicitud,
+          nombreEmpresa: nombreEmpresa,
+          nombreComercial: nombreComercial,
+          rnc,
+          categoriaIrcId: categoriaIrc.id,
+          estadoId: estadoPendiente?.id || 1,
+          recibidoPorId: req.usuario!.id,
+          fechaRecepcion: new Date()
+        }
+      });
+
+      // Vincular formulario con solicitud
+      await tx.formulario.update({
+        where: { id: nuevoFormulario.id },
+        data: { solicitudIrcId: solicitud.id }
+      });
+
+      console.log(`✅ Webhook IRC: Creada solicitud ${codigoSolicitud} desde formulario ${codigo}`);
+    }
+
     return nuevoFormulario;
   });
 
@@ -280,33 +400,102 @@ export const createFormulario = asyncHandler(async (req: AuthRequest, res: Respo
 // PUT /api/formularios/:id
 export const updateFormulario = asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
-  const { observaciones, firma } = req.body;
+  const { observaciones, firma, productos } = req.body;
 
-  const existente = await prisma.formulario.findUnique({ where: { id } });
+  const existente = await prisma.formulario.findUnique({
+    where: { id },
+    include: {
+      productos: {
+        include: {
+          campos: true
+        }
+      }
+    }
+  });
 
   if (!existente) {
     throw new AppError('Formulario no encontrado', 404);
   }
 
-  const formulario = await prisma.formulario.update({
-    where: { id },
-    data: {
-      observaciones,
-      firma: firma || null
-    },
-    include: {
-      estado: true,
-      clientes: {
-        include: {
-          cliente: true
-        }
-      },
-      productos: {
-        include: {
-          producto: true
+  // Si hay productos para actualizar, usar transacción
+  const formulario = await prisma.$transaction(async (tx) => {
+    // Actualizar datos básicos del formulario
+    const formularioActualizado = await tx.formulario.update({
+      where: { id },
+      data: {
+        observaciones,
+        firma: firma || null
+      }
+    });
+
+    // Si hay productos para actualizar
+    if (productos && Array.isArray(productos)) {
+      for (const productoData of productos) {
+        const { productoId, campos } = productoData;
+
+        // Buscar el FormularioProducto existente
+        const formularioProducto = existente.productos.find(
+          fp => fp.productoId === productoId
+        );
+
+        if (formularioProducto && campos && Array.isArray(campos)) {
+          // Eliminar campos antiguos
+          await tx.formularioProductoCampo.deleteMany({
+            where: {
+              formularioProductoId: formularioProducto.id
+            }
+          });
+
+          // Crear nuevos campos
+          for (const campo of campos) {
+            if (campo.campoId && campo.valor !== undefined) {
+              await tx.formularioProductoCampo.create({
+                data: {
+                  formularioProductoId: formularioProducto.id,
+                  campoId: campo.campoId,
+                  valor: campo.valor.toString()
+                }
+              });
+            }
+          }
         }
       }
     }
+
+    // Retornar formulario actualizado con todas sus relaciones
+    return tx.formulario.findUnique({
+      where: { id },
+      include: {
+        estado: true,
+        clientes: {
+          include: {
+            cliente: true
+          }
+        },
+        productos: {
+          include: {
+            producto: true,
+            campos: {
+              include: {
+                campo: true
+              }
+            }
+          }
+        },
+        solicitudIrc: {
+          include: {
+            estado: true,
+            categoriaIrc: true,
+            recibidoPor: {
+              select: {
+                id: true,
+                nombrecompleto: true
+              }
+            }
+          }
+        }
+      }
+    });
   });
 
   res.json(formulario);
@@ -437,4 +626,153 @@ export const deleteArchivo = asyncHandler(async (req: Request, res: Response) =>
   // Dependiendo de cómo almacenes los archivos (tabla separada o JSON)
 
   res.json({ message: 'Archivo eliminado exitosamente' });
+});
+
+/**
+ * POST /api/formularios/obras
+ * Crear formulario de registro de obra (nuevo flujo simplificado AaU)
+ */
+export const createFormularioObra = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!req.usuario) {
+    throw new AppError('No autenticado', 401);
+  }
+
+  const {
+    autores,        // Array de { clienteId, rol }
+    productoId,     // ID del producto/tipo de obra seleccionado
+    datosObra,      // Objeto con: titulo, subtitulo, anioCreacion, descripcion, paisOrigen
+  } = req.body;
+
+  // Validaciones
+  if (!autores || autores.length === 0) {
+    throw new AppError('Debe incluir al menos un autor', 400);
+  }
+
+  if (!productoId) {
+    throw new AppError('Debe seleccionar un tipo de obra', 400);
+  }
+
+  if (!datosObra || !datosObra.titulo || !datosObra.anioCreacion) {
+    throw new AppError('Debe completar los datos obligatorios de la obra', 400);
+  }
+
+  // Verificar que hay un autor principal
+  const tieneAutorPrincipal = autores.some((a: any) => a.rol === 'AUTOR_PRINCIPAL');
+  if (!tieneAutorPrincipal) {
+    throw new AppError('Debe designar un Autor Principal', 400);
+  }
+
+  // Obtener el producto y su precio
+  const producto = await prisma.producto.findUnique({
+    where: { id: productoId },
+    include: {
+      costos: {
+        where: {
+          OR: [
+            { fechaFinal: null },
+            { fechaFinal: { gte: new Date() } }
+          ],
+          fechaInicio: { lte: new Date() }
+        },
+        orderBy: { cantidadMin: 'asc' },
+        take: 1
+      }
+    }
+  });
+
+  if (!producto) {
+    throw new AppError('Producto no encontrado', 404);
+  }
+
+  const precioProducto = producto.costos[0]?.precio;
+  if (!precioProducto) {
+    throw new AppError('No se encontró precio para este producto', 500);
+  }
+
+  // Generar código único de formulario
+  const codigo = await generateCodigoFormulario();
+
+  // Obtener estado PENDIENTE
+  const estadoPendiente = await prisma.formularioEstado.findFirst({
+    where: { nombre: 'PENDIENTE' }
+  });
+
+  if (!estadoPendiente) {
+    throw new AppError('Estado PENDIENTE no configurado', 500);
+  }
+
+  // Crear formulario en transacción
+  const formulario = await prisma.$transaction(async (tx) => {
+    // 1. Crear formulario
+    const nuevoFormulario = await tx.formulario.create({
+      data: {
+        codigo,
+        fecha: new Date(),
+        estadoId: estadoPendiente.id,
+        usuarioId: req.usuario!.id,
+        // Guardar datos de la obra en observaciones temporalmente
+        // TODO: En el futuro crear campos específicos en el schema
+        observaciones: JSON.stringify({
+          titulo: datosObra.titulo,
+          subtitulo: datosObra.subtitulo,
+          anioCreacion: datosObra.anioCreacion,
+          descripcion: datosObra.descripcion,
+          paisOrigen: datosObra.paisOrigen,
+          ...datosObra.camposEspecificos // Campos específicos por tipo de obra
+        })
+      }
+    });
+
+    // 2. Asociar autores/clientes con sus roles
+    for (const autor of autores) {
+      await tx.formularioCliente.create({
+        data: {
+          formularioId: nuevoFormulario.id,
+          clienteId: autor.clienteId,
+          tipoRelacion: autor.rol
+        }
+      });
+    }
+
+    // 3. Asociar el producto
+    await tx.formularioProducto.create({
+      data: {
+        formularioId: nuevoFormulario.id,
+        productoId: producto.id,
+        cantidad: 1,
+        precio: precioProducto
+      }
+    });
+
+    return nuevoFormulario;
+  });
+
+  // Obtener formulario completo con relaciones
+  const formularioCompleto = await prisma.formulario.findUnique({
+    where: { id: formulario.id },
+    include: {
+      estado: true,
+      usuario: {
+        select: {
+          id: true,
+          nombrecompleto: true
+        }
+      },
+      clientes: {
+        include: {
+          cliente: true
+        }
+      },
+      productos: {
+        include: {
+          producto: true
+        }
+      }
+    }
+  });
+
+  res.status(201).json({
+    message: 'Formulario creado exitosamente',
+    formulario: formularioCompleto
+  });
 });

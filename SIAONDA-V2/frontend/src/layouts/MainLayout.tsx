@@ -60,15 +60,11 @@ const MainLayout = () => {
             {usuario?.tipo === 'Administrador' && (
               <NavLink to="/usuarios">Usuarios</NavLink>
             )}
-            <NavLink to="/clientes">Clientes</NavLink>
-            <NavLink to="/formularios">Formularios</NavLink>
-            <NavLink to="/certificados">Certificados</NavLink>
-            {(usuario?.tipo === 'Cajero' || usuario?.tipo === 'Administrador') && (
-              <>
-                <NavLink to="/facturas">Facturas</NavLink>
-                <NavLink to="/cajas">Cajas</NavLink>
-              </>
-            )}
+            <NavLink to="/aau">Atención al Usuario</NavLink>
+            <NavLink to="/registro">Registro</NavLink>
+            <NavLink to="/cajas">Cajas</NavLink>
+            <NavLink to="/inspectoria">Inspectoría</NavLink>
+            <NavLink to="/juridico">Jurídico</NavLink>
           </div>
         </div>
       </nav>

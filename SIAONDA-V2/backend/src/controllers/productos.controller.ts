@@ -5,6 +5,7 @@ import { AppError, asyncHandler } from '../middleware/errorHandler';
 // GET /api/productos
 export const getProductos = asyncHandler(async (req: Request, res: Response) => {
   const activos = req.query.activos === 'true';
+  const conPrecios = req.query.conPrecios === 'true';
 
   const where: any = {};
   if (activos) {
@@ -23,11 +24,21 @@ export const getProductos = asyncHandler(async (req: Request, res: Response) => 
           ],
           fechaInicio: { lte: new Date() }
         },
-        orderBy: { cantidadMin: 'asc' }
+        orderBy: { cantidadMin: 'asc' },
+        take: 1 // Solo el precio base (cantidad = 1)
       }
     },
     orderBy: { nombre: 'asc' }
   });
+
+  // Si se solicita conPrecios, agregar el precio actual al objeto
+  if (conPrecios) {
+    const productosConPrecio = productos.map(producto => ({
+      ...producto,
+      precio: producto.costos[0]?.precio || 0
+    }));
+    return res.json(productosConPrecio);
+  }
 
   res.json(productos);
 });

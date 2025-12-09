@@ -5,6 +5,7 @@ import {
   getFormularios,
   getFormulario,
   createFormulario,
+  createFormularioObra,
   updateFormulario,
   asentarFormulario,
   getEstadosFormulario,
@@ -20,6 +21,7 @@ router.get('/estados', getEstadosFormulario);
 router.get('/', getFormularios);
 router.get('/:id', getFormulario);
 router.post('/', createFormulario);
+router.post('/obras', createFormularioObra); // Nuevo endpoint para obras
 router.put('/:id', updateFormulario);
 router.post('/:id/asentar', asentarFormulario);
 router.delete('/:id', deleteFormulario);

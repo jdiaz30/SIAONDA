@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Link } from 'react-router-dom';
+import { api } from '../services/api';
 
 interface DashboardStats {
   formulariosHoy: number;
@@ -21,6 +22,7 @@ const DashboardPage = () => {
     montoHoy: 'RD$ 0.00',
     cajaAbierta: false,
   });
+  const [loading, setLoading] = useState(true);
 
   // Permisos basados en tipo de usuario (Réplica de SIAONDA V1)
   const permisos = {
@@ -34,10 +36,30 @@ const DashboardPage = () => {
     puedeVerUsuarios: ['SUPERUSUARIO', 'ADMINISTRADOR'].includes(usuario?.tipo || ''),
   };
 
-  // TODO: Cargar estadísticas desde el backend
+  // Cargar estadísticas desde el backend
   useEffect(() => {
-    // fetchStats();
+    fetchStats();
   }, []);
+
+  const fetchStats = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/dashboard/stats');
+      setStats(response.data.data);
+    } catch (error) {
+      console.error('Error al cargar estadísticas:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-gray-600">Cargando dashboard...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -266,7 +288,6 @@ const DashboardPage = () => {
           <InfoRow label="Código" value={usuario?.codigo || ''} />
           <InfoRow label="Tipo" value={usuario?.tipo || ''} />
           <InfoRow label="Correo" value={usuario?.correo || 'No registrado'} />
-          <InfoRow label="Teléfono" value={usuario?.telefono || 'No registrado'} />
         </div>
       </div>
     </div>
@@ -289,7 +310,7 @@ const DashboardCard = ({
   const colorClasses = {
     blue: 'from-blue-500 to-blue-600',
     green: 'from-green-500 to-green-600',
-    purple: 'from-purple-500 to-purple-600',
+    purple: 'from-green-500 to-green-600',
     yellow: 'from-yellow-500 to-yellow-600',
   }[color] || 'from-gray-500 to-gray-600';
 
@@ -325,7 +346,7 @@ const QuickAccessCard = ({
     blue: 'text-blue-600 bg-blue-50 hover:bg-blue-100',
     indigo: 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100',
     green: 'text-green-600 bg-green-50 hover:bg-green-100',
-    purple: 'text-purple-600 bg-purple-50 hover:bg-purple-100',
+    purple: 'text-green-600 bg-green-50 hover:bg-green-100',
     yellow: 'text-yellow-600 bg-yellow-50 hover:bg-yellow-100',
     red: 'text-red-600 bg-red-50 hover:bg-red-100',
     orange: 'text-orange-600 bg-orange-50 hover:bg-orange-100',

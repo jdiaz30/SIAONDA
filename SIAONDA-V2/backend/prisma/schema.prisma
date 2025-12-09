@@ -2,7 +2,8 @@
 // Basado en el análisis del sistema original
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -44,6 +45,40 @@ model Usuario {
   certificados       Certificado[]
   cajas              Caja[]
   pagos              Pago[]
+
+  // Inspectoría - Empresas
+  empresasCreadas                 EmpresaInspeccionada[]
+  documentosEmpresaCargados       DocumentoEmpresa[]                @relation("DocumentosEmpresaCargados")
+
+  // Inspectoría - Solicitudes de Registro (PR-DI-002)
+  solicitudesRecibidasAuU         SolicitudRegistroInspeccion[]     @relation("SolicitudesRecibidasAuU")
+  solicitudesValidadas            SolicitudRegistroInspeccion[]     @relation("SolicitudesValidadas")
+  solicitudesAsentadas            SolicitudRegistroInspeccion[]     @relation("SolicitudesAsentadas")
+  solicitudesFirmadas             SolicitudRegistroInspeccion[]     @relation("SolicitudesFirmadas")
+  solicitudesEntregadas           SolicitudRegistroInspeccion[]     @relation("SolicitudesEntregadas")
+
+  // Inspectoría - Certificados
+  certificadosEmitidos            CertificadoInspeccion[]           @relation("CertificadosEmitidos")
+  certificadosFirmados            CertificadoInspeccion[]           @relation("CertificadosFirmados")
+
+  // Inspectoría - Casos de Inspección (PR-DI-001, PR-DI-003, PR-DI-004)
+  casosAsignados                  CasoInspeccion[]                  @relation("CasosAsignados")
+  casosDelInspector               CasoInspeccion[]                  @relation("CasosDelInspector")
+  casosCerrados                   CasoInspeccion[]                  @relation("CasosCerrados")
+
+  // Inspectoría - Actas
+  actasInspector                  ActaInspeccion[]                  @relation("ActasInspector")
+
+  // Inspectoría - Operativos
+  operativosCoordinados           Operativo[]                       @relation("OperativosCoordinados")
+  operativosComoInspector         InspectorOperativo[]              @relation("InspectorEnOperativos")
+
+  // Inspectoría - Nuevo flujo de inspecciones
+  viajesCreados                   ViajeOficio[]                     @relation("ViajesCreados")
+  inspeccionesEnViajes            ViajeOficioInspector[]            @relation("InspectorEnViajes")
+  actasOficioLlenadas             ActaInspeccionOficio[]            @relation("ActasLlenadasPorInspector")
+  denunciasRecibidas              Denuncia[]                        @relation("DenunciasRecibidas")
+  casosJuridicosRecibidos         CasoJuridico[]                    @relation("CasosJuridicosRecibidos")
 
   @@map("usuarios")
   @@index([token])
@@ -161,29 +196,46 @@ model ClienteArchivo {
 // ============================================
 
 model Formulario {
-  id              Int       @id @default(autoincrement())
-  codigo          String    @unique @db.VarChar(50) // FORM-YYYY-NNNN
-  fecha           DateTime  @default(now())
-  estadoId        Int       @map("estado_id")
-  usuarioId       Int       @map("usuario_id")
-  facturaId       Int?      @map("factura_id")
-  firma           String?   @db.Text // Base64 de firma digital
-  observaciones   String?   @db.Text
+  id                    Int       @id @default(autoincrement())
+  codigo                String    @unique @db.VarChar(50) // FORM-YYYY-NNNN
+  fecha                 DateTime  @default(now())
+  estadoId              Int       @map("estado_id")
+  usuarioId             Int       @map("usuario_id")
+  facturaId             Int?      @map("factura_id")
+  solicitudIrcId        Int?      @unique @map("solicitud_irc_id") // Vinculación con Inspectoría
+  firma                 String?   @db.Text // Base64 de firma digital
+  observaciones         String?   @db.Text
 
-  creadoEn        DateTime  @default(now()) @map("creado_en")
-  actualizadoEn   DateTime  @updatedAt @map("actualizado_en")
+  // Información de asentamiento (libro físico)
+  libro                 String?   @db.VarChar(50) // Ej: "L-2024-05"
+  hoja                  String?   @db.VarChar(50) // Ej: "123"
+  fechaAsentamiento     DateTime? @map("fecha_asentamiento")
 
-  estado          FormularioEstado      @relation(fields: [estadoId], references: [id])
-  usuario         Usuario               @relation(fields: [usuarioId], references: [id])
-  factura         Factura?              @relation(fields: [facturaId], references: [id])
+  // Seguimiento
+  fechaDevolucion       DateTime? @map("fecha_devolucion")
+  mensajeDevolucion     String?   @db.Text @map("mensaje_devolucion")
+  fechaEntrega          DateTime? @map("fecha_entrega")
 
-  productos       FormularioProducto[]
-  clientes        FormularioCliente[]
-  certificados    Certificado[]
+  // Totales
+  montoTotal            Decimal   @default(0) @db.Decimal(10, 2) @map("monto_total")
+
+  creadoEn              DateTime  @default(now()) @map("creado_en")
+  actualizadoEn         DateTime  @updatedAt @map("actualizado_en")
+
+  estado                FormularioEstado             @relation(fields: [estadoId], references: [id])
+  usuario               Usuario                      @relation(fields: [usuarioId], references: [id])
+  factura               Factura?                     @relation(fields: [facturaId], references: [id])
+  solicitudIrc          SolicitudRegistroInspeccion? @relation(fields: [solicitudIrcId], references: [id])
+
+  productos             FormularioProducto[]
+  clientes              FormularioCliente[]
+  certificados          Certificado[]
+  archivos              FormularioArchivo[]
 
   @@map("formularios")
   @@index([codigo])
   @@index([fecha])
+  @@index([estadoId])
 }
 
 model FormularioEstado {
@@ -209,6 +261,7 @@ model FormularioProducto {
 
   campos          FormularioProductoCampo[]
   certificados    Certificado[]
+  archivos        FormularioArchivo[]
 
   @@map("formularios_productos")
   @@index([formularioId])
@@ -248,16 +301,20 @@ model FormularioCampo {
   campo       String    @db.VarChar(100)  // nombre técnico
   titulo      String    @db.VarChar(200)  // título visible
   descripcion String?   @db.Text
+  placeholder String?   @db.VarChar(255) // Texto de ejemplo
   requerido   Boolean   @default(false)
   orden       Int       @default(0)
   activo      Boolean   @default(true)
+  grupo       String?   @db.VarChar(100) // Para campos condicionales
 
   tipo        FormularioCampoTipo         @relation(fields: [tipoId], references: [id])
   producto    Producto?                   @relation(fields: [productoId], references: [id])
 
   valores     FormularioProductoCampo[]
+  archivos    FormularioArchivo[]
 
   @@map("formularios_campos")
+  @@unique([productoId, campo])
   @@index([productoId])
 }
 
@@ -269,6 +326,28 @@ model FormularioCampoTipo {
   campos      FormularioCampo[]
 
   @@map("formularios_campos_tipos")
+}
+
+model FormularioArchivo {
+  id                    Int       @id @default(autoincrement())
+  formularioId          Int       @map("formulario_id")
+  formularioProductoId  Int?      @map("formulario_producto_id")
+  campoId               Int?      @map("campo_id")
+  nombreOriginal        String    @db.VarChar(255) @map("nombre_original")
+  nombreSistema         String    @unique @db.VarChar(255) @map("nombre_sistema")
+  ruta                  String    @db.VarChar(500)
+  tamano                BigInt    // Tamaño en bytes (para archivos grandes)
+  mimeType              String    @db.VarChar(100) @map("mime_type")
+
+  creadoEn              DateTime  @default(now()) @map("creado_en")
+
+  formulario            Formulario              @relation(fields: [formularioId], references: [id], onDelete: Cascade)
+  formularioProducto    FormularioProducto?     @relation(fields: [formularioProductoId], references: [id], onDelete: Cascade)
+  campo                 FormularioCampo?        @relation(fields: [campoId], references: [id])
+
+  @@map("formularios_archivos")
+  @@index([formularioId])
+  @@index([formularioProductoId])
 }
 
 // ============================================
@@ -374,13 +453,15 @@ model Factura {
   codigo          String    @unique @db.VarChar(50) // Número de factura
   ncf             String?   @unique @db.VarChar(50) // Número Comprobante Fiscal
   rnc             String?   @db.VarChar(20)         // RNC del cliente
-  clienteId       Int       @map("cliente_id")
+  clienteId       Int?      @map("cliente_id") // Opcional para facturas IRC
   cajaId          Int?      @map("caja_id")
+  cierreId        Int?      @default(0) @map("cierre_id") // 0 hasta que se cierre la caja
   estadoId        Int       @map("estado_id")
   certificadoId   Int?      @map("certificado_id")
   fecha           DateTime  @default(now())
   subtotal        Decimal   @db.Decimal(10, 2)
   itbis           Decimal   @db.Decimal(10, 2)
+  descuento       Decimal   @default(0) @db.Decimal(10, 2)
   total           Decimal   @db.Decimal(10, 2)
   pagado          Decimal   @default(0) @db.Decimal(10, 2)
   metodoPago      String?   @db.VarChar(50) @map("metodo_pago")
@@ -390,7 +471,7 @@ model Factura {
 
   creadoEn        DateTime  @default(now()) @map("creado_en")
 
-  cliente         Cliente         @relation(fields: [clienteId], references: [id])
+  cliente         Cliente?        @relation(fields: [clienteId], references: [id])
   caja            Caja?           @relation(fields: [cajaId], references: [id])
   estado          FacturaEstado   @relation(fields: [estadoId], references: [id])
   certificado     Certificado?    @relation(fields: [certificadoId], references: [id])
@@ -399,6 +480,12 @@ model Factura {
   items           FacturaItem[]
   pagos           Pago[]
   formularios     Formulario[]
+
+  // Inspectoría
+  solicitudInspeccion       SolicitudRegistroInspeccion? @relation("FacturaSolicitudInspeccion")
+  certificadoInspeccion     CertificadoInspeccion?       @relation("FacturaCertificadoInspeccion")
+  casoInspeccion            CasoInspeccion?              @relation("FacturaCasoInspeccion")
+  denuncia                  Denuncia?                    @relation("FacturaDenuncia")
 
   @@map("facturas")
   @@index([codigo])
@@ -414,6 +501,18 @@ model FacturaEstado {
   facturas    Factura[]
 
   @@map("facturas_estados")
+}
+
+model MetodoPago {
+  id              Int       @id @default(autoincrement())
+  nombre          String    @unique @db.VarChar(50) // Efectivo, Cheque, Transferencia, Tarjeta
+  descripcion     String?   @db.Text
+  requiereReferencia Boolean @default(false) @map("requiere_referencia") // true para Cheque, Transferencia, Tarjeta
+  activo          Boolean   @default(true)
+
+  pagos           Pago[]
+
+  @@map("metodos_pago")
 }
 
 model FacturaDetalle {
@@ -449,15 +548,17 @@ model FacturaItem {
 }
 
 model Pago {
-  id          Int       @id @default(autoincrement())
-  facturaId   Int       @map("factura_id")
-  monto       Decimal   @db.Decimal(10, 2)
-  fecha       DateTime  @default(now())
-  usuarioId   Int       @map("usuario_id")
-  referencia  String?   @db.VarChar(100) // Referencia de pago
+  id            Int         @id @default(autoincrement())
+  facturaId     Int         @map("factura_id")
+  metodoPagoId  Int         @map("metodo_pago_id")
+  monto         Decimal     @db.Decimal(10, 2)
+  fecha         DateTime    @default(now())
+  usuarioId     Int         @map("usuario_id")
+  referencia    String?     @db.VarChar(100) // Referencia de cheque/transferencia/autorización
 
-  factura     Factura   @relation(fields: [facturaId], references: [id], onDelete: Cascade)
-  usuario     Usuario   @relation(fields: [usuarioId], references: [id])
+  factura       Factura     @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+  metodoPago    MetodoPago  @relation(fields: [metodoPagoId], references: [id])
+  usuario       Usuario     @relation(fields: [usuarioId], references: [id])
 
   @@map("pagos")
   @@index([facturaId])
@@ -558,6 +659,28 @@ model Sucursal {
 }
 
 // ============================================
+// COMPROBANTES FISCALES (NCF)
+// ============================================
+
+model SecuenciaNcf {
+  id              Int       @id @default(autoincrement())
+  tipoComprobante String    @db.VarChar(3) // B01, B02, B14, B15, etc.
+  serie           String    @db.VarChar(1) // E para electrónico
+  numeroInicial   BigInt    @map("numero_inicial") // Número inicial del rango
+  numeroFinal     BigInt    @map("numero_final")   // Número final del rango
+  numeroActual    BigInt    @map("numero_actual")  // Último número usado
+  fechaVencimiento DateTime @map("fecha_vencimiento") // Fecha límite de uso
+  activo          Boolean   @default(true)
+  observaciones   String?   @db.Text
+
+  creadoEn        DateTime  @default(now()) @map("creado_en")
+
+  @@unique([tipoComprobante, serie, numeroInicial])
+  @@map("secuencias_ncf")
+  @@index([tipoComprobante, activo])
+}
+
+// ============================================
 // VISITAS / RECEPCIÓN
 // ============================================
 
@@ -580,4 +703,770 @@ model Visita {
   @@map("visitas")
   @@index([clienteId])
   @@index([fechaEntrada])
+}
+
+// ============================================
+// MÓDULO DE INSPECTORÍA
+// ============================================
+
+// -------- EMPRESAS INSPECCIONADAS --------
+
+model EmpresaInspeccionada {
+  id                    Int       @id @default(autoincrement())
+
+  // Datos básicos de la empresa
+  nombreEmpresa         String    @db.VarChar(255) @map("nombre_empresa")
+  nombreComercial       String?   @db.VarChar(255) @map("nombre_comercial")
+  rnc                   String    @unique @db.VarChar(20)
+  direccion             String    @db.Text
+  telefono              String    @db.VarChar(50)
+  fax                   String?   @db.VarChar(50)
+  email                 String    @db.VarChar(255)
+  paginaWeb             String?   @db.VarChar(255) @map("pagina_web")
+
+  // Categoría IRC (IRC-01 a IRC-15)
+  categoriaIrcId        Int       @map("categoria_irc_id")
+  categoriaIrc          CategoriaIrc @relation(fields: [categoriaIrcId], references: [id])
+
+  // Tipo de persona
+  tipoPersona           String    @db.VarChar(10) // 'MORAL' o 'FISICA'
+
+  // Si es Persona Física
+  nombrePropietario     String?   @db.VarChar(255) @map("nombre_propietario")
+  cedulaPropietario     String?   @db.VarChar(20) @map("cedula_propietario")
+
+  // Descripción de actividades
+  descripcionActividades String   @db.Text @map("descripcion_actividades")
+
+  // Tracking y ubicación
+  provinciaId           Int?      @map("provincia_id")
+  provincia             Provincia? @relation(fields: [provinciaId], references: [id])
+  personaContacto       String?   @db.VarChar(255) @map("persona_contacto")
+
+  // Estados y conclusiones (mantener de V1)
+  statusId              Int       @map("status_id")
+  status                StatusInspeccion @relation(fields: [statusId], references: [id])
+  estadoJuridicoId      Int?      @map("estado_juridico_id")
+  estadoJuridico        EstadoJuridico? @relation(fields: [estadoJuridicoId], references: [id])
+  conclusionId          Int?      @map("conclusion_id")
+  conclusion            Conclusion? @relation(fields: [conclusionId], references: [id])
+  statusExternoId       Int?      @map("status_externo_id")
+  statusExterno         StatusExterno? @relation(fields: [statusExternoId], references: [id])
+  registrado            Boolean   @default(false)
+  existeEnSistema       Boolean   @default(false) @map("existe_en_sistema")
+
+  // Fechas importantes
+  fechaRegistro         DateTime? @map("fecha_registro")
+  fechaRenovacion       DateTime? @map("fecha_renovacion")
+  fechaVencimiento      DateTime? @map("fecha_vencimiento") // 1 año después del registro
+  fechaNotificacion     DateTime? @map("fecha_notificacion")
+  fechaActaInfraccion   DateTime? @map("fecha_acta_infraccion")
+
+  // Comentarios internos
+  comentario            String?   @db.Text
+
+  // Auditoría
+  creadoEn              DateTime  @default(now()) @map("creado_en")
+  actualizadoEn         DateTime  @updatedAt @map("actualizado_en")
+  creadoPorId           Int       @map("creado_por_id")
+  creadoPor             Usuario   @relation(fields: [creadoPorId], references: [id])
+
+  // Relaciones
+  consejoAdministracion ConsejoAdministracion[]
+  principalesClientes   ClienteEmpresa[]
+  documentos            DocumentoEmpresa[]
+  certificadosInspeccion CertificadoInspeccion[]
+  solicitudesRegistro   SolicitudRegistroInspeccion[]
+  casosInspeccion       CasoInspeccion[]
+  actas                 ActaInspeccion[]          @relation("ActasDeEmpresa")
+  actasOficio           ActaInspeccionOficio[]
+
+  @@map("empresas_inspeccionadas")
+  @@index([rnc])
+  @@index([categoriaIrcId])
+  @@index([fechaRenovacion])
+  @@index([fechaVencimiento])
+  @@index([statusId])
+}
+
+// -------- CONSEJO DE ADMINISTRACIÓN (PERSONA MORAL) --------
+
+model ConsejoAdministracion {
+  id          Int      @id @default(autoincrement())
+  empresaId   Int      @map("empresa_id")
+  empresa     EmpresaInspeccionada @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  cargo       String   @db.VarChar(50) // 'PRESIDENTE', 'SECRETARIO', 'TESORERO', 'VOCAL'
+  nombre      String   @db.VarChar(255)
+  cedula      String   @db.VarChar(20)
+
+  @@map("consejo_administracion")
+  @@index([empresaId])
+}
+
+// -------- PRINCIPALES CLIENTES --------
+
+model ClienteEmpresa {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int      @map("empresa_id")
+  empresa       EmpresaInspeccionada @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  nombreCliente String   @db.VarChar(255) @map("nombre_cliente")
+  orden         Int      // Para ordenar (cliente 1, 2, 3...)
+
+  @@map("clientes_empresa")
+  @@index([empresaId])
+}
+
+// -------- DOCUMENTOS ADJUNTOS --------
+
+model DocumentoEmpresa {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int      @map("empresa_id")
+  empresa       EmpresaInspeccionada @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  tipoDocumento String   @db.VarChar(50) @map("tipo_documento") // 'RNC', 'CEDULA', 'REGISTRO_MERCANTIL', 'FACTURAS'
+  nombreArchivo String   @db.VarChar(255) @map("nombre_archivo")
+  rutaArchivo   String   @db.VarChar(500) @map("ruta_archivo")
+  tamano        Int      // En bytes
+  mimeType      String   @db.VarChar(100) @map("mime_type")
+
+  cargadoEn     DateTime @default(now()) @map("cargado_en")
+  cargadoPorId  Int      @map("cargado_por_id")
+  cargadoPor    Usuario  @relation("DocumentosEmpresaCargados", fields: [cargadoPorId], references: [id])
+
+  @@map("documentos_empresa")
+  @@index([empresaId])
+  @@index([tipoDocumento])
+}
+
+// -------- CATEGORÍAS IRC --------
+
+model CategoriaIrc {
+  id          Int      @id @default(autoincrement())
+  codigo      String   @unique @db.VarChar(10) // 'IRC-01' a 'IRC-15'
+  nombre      String   @db.VarChar(255)
+  descripcion String   @db.Text
+  precio      Decimal  @db.Decimal(10, 2) // Precio según resolución 013-2023
+  activo      Boolean  @default(true)
+
+  empresas    EmpresaInspeccionada[]
+  solicitudes SolicitudRegistroInspeccion[]
+
+  @@map("categorias_irc")
+  @@index([codigo])
+}
+
+// -------- CATÁLOGOS DE ESTADOS --------
+
+model StatusInspeccion {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50) // VISITADA, NO NOTIFICADA, NOTIFICACION, INTIMADA
+  descripcion String?   @db.Text
+
+  empresas    EmpresaInspeccionada[]
+  casos       CasoInspeccion[]
+
+  @@map("status_inspeccion")
+}
+
+model EstadoJuridico {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(100) // STATUS OK, INTIMADA POR DEP. LEGAL, REMITIDA DEP. JURIDICO
+  descripcion String?   @db.Text
+
+  empresas    EmpresaInspeccionada[]
+
+  @@map("estados_juridicos")
+}
+
+model Conclusion {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50) // VIGENTE, PENDIENTE, INACTIVA, TRABAJADA, NO CALIFICA
+  descripcion String?   @db.Text
+
+  empresas    EmpresaInspeccionada[]
+
+  @@map("conclusiones")
+}
+
+model StatusExterno {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(100) // AL DIA, ATRASO EN RESPONSABILIDADES, EN PROCESO LEGAL
+  descripcion String?   @db.Text
+
+  empresas    EmpresaInspeccionada[]
+
+  @@map("status_externos")
+}
+
+model Provincia {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(100)
+  codigo      String?   @db.VarChar(5)
+
+  empresas    EmpresaInspeccionada[]
+  viajesOficio ViajeOficio[]
+
+  @@map("provincias")
+}
+
+// -------- FLUJO 1: SOLICITUDES DE REGISTRO Y CERTIFICACIÓN (PR-DI-002) --------
+
+model SolicitudRegistroInspeccion {
+  id                    Int       @id @default(autoincrement())
+  codigo                String    @unique @db.VarChar(50) @map("codigo") // SOL-INSP-YYYY-NNNN
+
+  empresaId             Int?      @map("empresa_id") // NULL si es primera vez
+  empresa               EmpresaInspeccionada? @relation(fields: [empresaId], references: [id])
+
+  tipoSolicitud         String    @db.VarChar(50) @map("tipo_solicitud") // 'REGISTRO_NUEVO' o 'RENOVACION'
+
+  // Datos de la solicitud (pueden ser NULL si empresa ya existe)
+  nombreEmpresa         String?   @db.VarChar(255) @map("nombre_empresa")
+  nombreComercial       String?   @db.VarChar(255) @map("nombre_comercial")
+  rnc                   String    @db.VarChar(20)
+  categoriaIrcId        Int       @map("categoria_irc_id")
+  categoriaIrc          CategoriaIrc @relation(fields: [categoriaIrcId], references: [id])
+
+  // Workflow states
+  estadoId              Int       @map("estado_id")
+  estado                EstadoSolicitudInspeccion @relation(fields: [estadoId], references: [id])
+
+  // Factura generada automáticamente
+  facturaId             Int?      @unique @map("factura_id")
+  factura               Factura?  @relation("FacturaSolicitudInspeccion", fields: [facturaId], references: [id])
+
+  // Datos de asentamiento (introducido por Paralegal)
+  numeroRegistro        String?   @unique @db.VarChar(50) @map("numero_registro") // Código del formulario: 00000000/MM/YYYY
+  numeroLibro           String?   @db.VarChar(50) @map("numero_libro") // Ej: "5", "12"
+  numeroHoja            String?   @db.VarChar(50) @map("numero_hoja") // Ej: "145", "23"
+
+  // Certificado generado
+  certificadoId         Int?      @unique @map("certificado_id")
+  certificado           CertificadoInspeccion? @relation(fields: [certificadoId], references: [id])
+
+  // Tracking del flujo
+  recibidoPorId         Int?      @map("recibido_por_id") // Técnico AuU
+  recibidoPor           Usuario?  @relation("SolicitudesRecibidasAuU", fields: [recibidoPorId], references: [id])
+  fechaRecepcion        DateTime? @map("fecha_recepcion")
+
+  validadoPorId         Int?      @map("validado_por_id") // Paralegal Inspectoría
+  validadoPor           Usuario?  @relation("SolicitudesValidadas", fields: [validadoPorId], references: [id])
+  fechaValidacion       DateTime? @map("fecha_validacion")
+
+  fechaPago             DateTime? @map("fecha_pago")
+
+  asentadoPorId         Int?      @map("asentado_por_id") // Paralegal que introduce número
+  asentadoPor           Usuario?  @relation("SolicitudesAsentadas", fields: [asentadoPorId], references: [id])
+  fechaAsentamiento     DateTime? @map("fecha_asentamiento")
+
+  firmadoPorId          Int?      @map("firmado_por_id") // Encargado de Registro
+  firmadoPor            Usuario?  @relation("SolicitudesFirmadas", fields: [firmadoPorId], references: [id])
+  fechaFirma            DateTime? @map("fecha_firma")
+
+  entregadoPorId        Int?      @map("entregado_por_id") // Auxiliar AuU
+  entregadoPor          Usuario?  @relation("SolicitudesEntregadas", fields: [entregadoPorId], references: [id])
+  fechaEntrega          DateTime? @map("fecha_entrega")
+
+  observaciones         String?   @db.Text
+
+  // Vinculación con Formulario (AuU)
+  formulario            Formulario?
+
+  creadoEn              DateTime  @default(now()) @map("creado_en")
+  actualizadoEn         DateTime  @updatedAt @map("actualizado_en")
+
+  @@map("solicitudes_registro_inspeccion")
+  @@index([codigo])
+  @@index([rnc])
+  @@index([estadoId])
+  @@index([fechaRecepcion])
+}
+
+model EstadoSolicitudInspeccion {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50)
+  // Estados: PENDIENTE, VALIDADA, PAGADA, ASENTADA, PENDIENTE_FIRMA, LISTA_ENTREGA, ENTREGADA, RECHAZADA
+  descripcion String?   @db.Text
+  orden       Int       @default(0) // Para ordenar en el workflow
+
+  solicitudes SolicitudRegistroInspeccion[]
+
+  @@map("estados_solicitud_inspeccion")
+}
+
+// -------- CERTIFICADOS DE INSPECTORÍA --------
+
+model CertificadoInspeccion {
+  id                    Int      @id @default(autoincrement())
+  empresaId             Int      @map("empresa_id")
+  empresa               EmpresaInspeccionada @relation(fields: [empresaId], references: [id])
+
+  numeroCertificado     String   @unique @db.VarChar(50) @map("numero_certificado") // Código del formulario: 00000000/MM/YYYY
+  numeroRegistro        String   @unique @db.VarChar(50) @map("numero_registro") // Código del formulario: 00000000/MM/YYYY
+  numeroLibro           String?  @db.VarChar(50) @map("numero_libro") // Del libro físico
+  numeroHoja            String?  @db.VarChar(50) @map("numero_hoja") // De la hoja del libro
+
+  facturaId             Int      @unique @map("factura_id")
+  factura               Factura  @relation("FacturaCertificadoInspeccion", fields: [facturaId], references: [id])
+
+  fechaEmision          DateTime @default(now()) @map("fecha_emision")
+  fechaVencimiento      DateTime @map("fecha_vencimiento") // 1 año después
+
+  rutaPdf               String   @db.VarChar(500) @map("ruta_pdf")
+  rutaPdfFirmado        String?  @db.VarChar(500) @map("ruta_pdf_firmado") // PDF después de firma digital
+
+  emitidoPorId          Int      @map("emitido_por_id") // Paralegal que genera
+  emitidoPor            Usuario  @relation("CertificadosEmitidos", fields: [emitidoPorId], references: [id])
+
+  firmadoPorId          Int?     @map("firmado_por_id") // Encargado de Registro
+  firmadoPor            Usuario? @relation("CertificadosFirmados", fields: [firmadoPorId], references: [id])
+  fechaFirma            DateTime? @map("fecha_firma")
+
+  anulado               Boolean  @default(false)
+  motivoAnulacion       String?  @db.Text @map("motivo_anulacion")
+
+  creadoEn              DateTime @default(now()) @map("creado_en")
+
+  solicitud             SolicitudRegistroInspeccion?
+
+  @@map("certificados_inspeccion")
+  @@index([empresaId])
+  @@index([numeroRegistro])
+  @@index([fechaVencimiento])
+}
+
+// -------- FLUJO 2: CASOS DE INSPECCIÓN (PR-DI-001, PR-DI-003, PR-DI-004) --------
+
+model CasoInspeccion {
+  id                    Int       @id @default(autoincrement())
+  codigo                String    @unique @db.VarChar(50) // CASO-INSP-YYYY-NNNN
+
+  empresaId             Int       @map("empresa_id")
+  empresa               EmpresaInspeccionada @relation(fields: [empresaId], references: [id])
+
+  tipoCaso              String    @db.VarChar(50) @map("tipo_caso")
+  // OFICIO (PR-DI-001), DENUNCIA (PR-DI-003), OPERATIVO (PR-DI-004), RENOVACION
+
+  origenCaso            String?   @db.VarChar(50) @map("origen_caso")
+  // ALERTA_VENCIMIENTO, DENUNCIA_CIUDADANA, OPERATIVO_PLANIFICADO
+
+  estadoCasoId          Int       @map("estado_caso_id")
+  estadoCaso            EstadoCasoInspeccion @relation(fields: [estadoCasoId], references: [id])
+
+  statusId              Int       @map("status_id")
+  status                StatusInspeccion @relation(fields: [statusId], references: [id])
+
+  prioridad             String    @default("MEDIA") @db.VarChar(20) // ALTA, MEDIA, BAJA
+
+  // Asignación
+  asignadoPorId         Int?      @map("asignado_por_id") // Encargado de Inspectoría
+  asignadoPor           Usuario?  @relation("CasosAsignados", fields: [asignadoPorId], references: [id])
+
+  inspectorAsignadoId   Int?      @map("inspector_asignado_id")
+  inspectorAsignado     Usuario?  @relation("CasosDelInspector", fields: [inspectorAsignadoId], references: [id])
+  fechaAsignacion       DateTime? @map("fecha_asignacion")
+
+  // Denuncias (solo si tipoCaso = DENUNCIA)
+  facturaId             Int?      @unique @map("factura_id") // Factura del pago de denuncia
+  factura               Factura?  @relation("FacturaCasoInspeccion", fields: [facturaId], references: [id])
+
+  denuncianteNombre     String?   @db.VarChar(255) @map("denunciante_nombre")
+  denuncianteTelefono   String?   @db.VarChar(50) @map("denunciante_telefono")
+  denuncianteEmail      String?   @db.VarChar(255) @map("denunciante_email")
+  detallesDenuncia      String?   @db.Text @map("detalles_denuncia")
+
+  // Operativos (solo si tipoCaso = OPERATIVO)
+  operativoId           Int?      @map("operativo_id")
+  operativo             Operativo? @relation(fields: [operativoId], references: [id])
+
+  // 1ra Visita (Acta de Inspección)
+  fechaPrimeraVisita    DateTime? @map("fecha_primera_visita")
+  actaInspeccionId      Int?      @unique @map("acta_inspeccion_id")
+  actaInspeccion        ActaInspeccion? @relation("ActaPrimeraVisita", fields: [actaInspeccionId], references: [id])
+
+  // Plazo de corrección (10 días hábiles)
+  plazoCorreccionDias   Int?      @default(10) @map("plazo_correccion_dias")
+  fechaLimiteCorreccion DateTime? @map("fecha_limite_correccion")
+
+  // 2da Visita (Acta de Infracción)
+  fechaSegundaVisita    DateTime? @map("fecha_segunda_visita")
+  actaInfraccionId      Int?      @unique @map("acta_infraccion_id")
+  actaInfraccion        ActaInspeccion? @relation("ActaSegundaVisita", fields: [actaInfraccionId], references: [id])
+
+  // Cierre del caso
+  resolucion            String?   @db.VarChar(50)
+  // RESUELTO_PAGO, RESUELTO_CORRECCION, TRAMITADO_JURIDICO, CERRADO_SIN_ACCION
+
+  fechaCierre           DateTime? @map("fecha_cierre")
+  motivoCierre          String?   @db.Text @map("motivo_cierre")
+  cerradoPorId          Int?      @map("cerrado_por_id")
+  cerradoPor            Usuario?  @relation("CasosCerrados", fields: [cerradoPorId], references: [id])
+
+  observaciones         String?   @db.Text
+
+  creadoEn              DateTime  @default(now()) @map("creado_en")
+  actualizadoEn         DateTime  @updatedAt @map("actualizado_en")
+
+  // Relaciones con nuevo flujo de inspecciones
+  actaOficioGeneradora     ActaInspeccionOficio?  @relation("ActaGeneraCaso")
+  denunciaOrigen           Denuncia?              @relation("DenunciaGeneraCaso")
+  casoJuridico             CasoJuridico?          @relation("CasoEnJuridico")
+
+  @@map("casos_inspeccion")
+  @@index([codigo])
+  @@index([empresaId])
+  @@index([tipoCaso])
+  @@index([estadoCasoId])
+  @@index([inspectorAsignadoId])
+  @@index([fechaAsignacion])
+  @@index([fechaLimiteCorreccion])
+}
+
+model EstadoCasoInspeccion {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50)
+  // PENDIENTE_ASIGNACION, ASIGNADO, EN_PLAZO_GRACIA, REACTIVADO, CERRADO, TRAMITADO_JURIDICO
+  descripcion String?   @db.Text
+  orden       Int       @default(0)
+
+  casos       CasoInspeccion[]
+
+  @@map("estados_caso_inspeccion")
+}
+
+// -------- ACTAS DE INSPECCIÓN E INFRACCIÓN --------
+
+model ActaInspeccion {
+  id                    Int       @id @default(autoincrement())
+  numeroActa            String    @unique @db.VarChar(50) @map("numero_acta") // ACTA-YYYY-NNNN
+  tipoActa              String    @db.VarChar(50) @map("tipo_acta") // 'INSPECCION' (1ra visita) o 'INFRACCION' (2da visita)
+
+  empresaId             Int       @map("empresa_id")
+  empresa               EmpresaInspeccionada @relation("ActasDeEmpresa", fields: [empresaId], references: [id])
+
+  fechaVisita           DateTime  @map("fecha_visita")
+  horaVisita            String?   @db.VarChar(10) @map("hora_visita") // HH:MM
+
+  inspectorId           Int       @map("inspector_id")
+  inspector             Usuario   @relation("ActasInspector", fields: [inspectorId], references: [id])
+
+  // Hallazgos
+  cumplimiento          Boolean?  // true = cumple, false = no cumple, null = no aplica
+  hallazgos             String    @db.Text // Descripción de lo encontrado
+  infracciones          String?   @db.Text // Si hay infracciones encontradas
+
+  // Si es acta de inspección (1ra visita)
+  plazoCorreccion       Int?      @map("plazo_correccion") // Días para corregir (normalmente 10)
+  fechaLimite           DateTime? @map("fecha_limite") // fecha_visita + plazo
+
+  // Evidencia
+  evidenciaFotografica  String?   @db.Text @map("evidencia_fotografica") // JSON con rutas de fotos
+  documentosAdjuntos    String?   @db.Text @map("documentos_adjuntos") // JSON con rutas de documentos
+
+  // PDF generada
+  rutaPdf               String    @db.VarChar(500) @map("ruta_pdf")
+
+  observaciones         String?   @db.Text
+
+  creadoEn              DateTime  @default(now()) @map("creado_en")
+
+  casoPrimeraVisita     CasoInspeccion? @relation("ActaPrimeraVisita")
+  casoSegundaVisita     CasoInspeccion? @relation("ActaSegundaVisita")
+
+  @@map("actas_inspeccion")
+  @@index([empresaId])
+  @@index([fechaVisita])
+  @@index([fechaLimite])
+  @@index([tipoActa])
+}
+
+// -------- OPERATIVOS ANTIPIRATERÍA (PR-DI-004) --------
+
+model Operativo {
+  id                    Int       @id @default(autoincrement())
+  codigo                String    @unique @db.VarChar(50) // OP-YYYY-NNNN
+  nombre                String    @db.VarChar(255) // "Operativo Antipiratería Zona Colonial"
+
+  fechaPlanificada      DateTime  @map("fecha_planificada")
+  fechaEjecucion        DateTime? @map("fecha_ejecucion")
+
+  zona                  String?   @db.VarChar(255) // Zona geográfica
+  objetivos             String    @db.Text // Descripción de objetivos
+
+  estadoOperativoId     Int       @map("estado_operativo_id")
+  estadoOperativo       EstadoOperativo @relation(fields: [estadoOperativoId], references: [id])
+
+  // Coordinación
+  coordinadorId         Int       @map("coordinador_id") // Encargado de Inspectoría
+  coordinador           Usuario   @relation("OperativosCoordinados", fields: [coordinadorId], references: [id])
+
+  // Instituciones colaboradoras
+  instituciones         InstitucionOperativo[]
+
+  // Inspectores asignados
+  inspectores           InspectorOperativo[]
+
+  // Casos generados del operativo
+  casos                 CasoInspeccion[]
+
+  // Resultados
+  totalEmpresas         Int?      @default(0) @map("total_empresas")
+  totalInfracciones     Int?      @default(0) @map("total_infracciones")
+  reporteFinal          String?   @db.VarChar(500) @map("reporte_final") // Ruta al PDF de reporte
+
+  observaciones         String?   @db.Text
+
+  creadoEn              DateTime  @default(now()) @map("creado_en")
+  actualizadoEn         DateTime  @updatedAt @map("actualizado_en")
+
+  @@map("operativos")
+  @@index([codigo])
+  @@index([fechaPlanificada])
+  @@index([estadoOperativoId])
+}
+
+model EstadoOperativo {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50) // PLANIFICADO, EN_EJECUCION, COMPLETADO, CANCELADO
+  descripcion String?   @db.Text
+
+  operativos  Operativo[]
+
+  @@map("estados_operativo")
+}
+
+model InstitucionOperativo {
+  id            Int       @id @default(autoincrement())
+  operativoId   Int       @map("operativo_id")
+  operativo     Operativo @relation(fields: [operativoId], references: [id], onDelete: Cascade)
+
+  nombre        String    @db.VarChar(255) // Ej: "DNCD", "Policía Nacional", "Fiscalía"
+  contacto      String?   @db.VarChar(255)
+  telefono      String?   @db.VarChar(50)
+
+  @@map("instituciones_operativo")
+  @@index([operativoId])
+}
+
+model InspectorOperativo {
+  id            Int       @id @default(autoincrement())
+  operativoId   Int       @map("operativo_id")
+  operativo     Operativo @relation(fields: [operativoId], references: [id], onDelete: Cascade)
+
+  inspectorId   Int       @map("inspector_id")
+  inspector     Usuario   @relation("InspectorEnOperativos", fields: [inspectorId], references: [id])
+
+  rol           String?   @db.VarChar(100) // "Líder de Equipo", "Inspector de Campo"
+
+  @@map("inspectores_operativo")
+  @@index([operativoId])
+  @@index([inspectorId])
+  @@unique([operativoId, inspectorId])
+}
+
+// ============================================
+// NUEVO FLUJO DE INSPECCIONES
+// ============================================
+
+// -------- VIAJES DE INSPECCIÓN DE OFICIO --------
+
+model ViajeOficio {
+  id                Int       @id @default(autoincrement())
+  codigo            String    @unique @db.VarChar(50) // VIAJE-OFICIO-YYYY-NNNN
+  
+  provinciaId       Int       @map("provincia_id")
+  provincia         Provincia @relation(fields: [provinciaId], references: [id])
+  
+  fechaInicio       DateTime  @map("fecha_inicio")
+  fechaFin          DateTime? @map("fecha_fin")
+  
+  estadoViajeId     Int       @map("estado_viaje_id")
+  estadoViaje       EstadoViajeOficio @relation(fields: [estadoViajeId], references: [id])
+  
+  // Informe general del viaje (PDF)
+  rutaInformeGeneral String? @db.VarChar(500) @map("ruta_informe_general")
+  
+  observaciones     String?   @db.Text
+  
+  creadoPorId       Int       @map("creado_por_id")
+  creadoPor         Usuario   @relation("ViajesCreados", fields: [creadoPorId], references: [id])
+  
+  creadoEn          DateTime  @default(now()) @map("creado_en")
+  actualizadoEn     DateTime  @updatedAt @map("actualizado_en")
+  
+  // Relaciones
+  inspectores       ViajeOficioInspector[]
+  actasInspeccion   ActaInspeccionOficio[]
+  
+  @@map("viajes_oficio")
+  @@index([codigo])
+  @@index([provinciaId])
+  @@index([estadoViajeId])
+  @@index([fechaInicio])
+}
+
+model EstadoViajeOficio {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50) // ABIERTO, CERRADO, CANCELADO
+  descripcion String?   @db.Text
+  
+  viajes      ViajeOficio[]
+  
+  @@map("estados_viaje_oficio")
+}
+
+// Relación muchos a muchos: Viaje <-> Inspectores
+model ViajeOficioInspector {
+  id            Int       @id @default(autoincrement())
+  
+  viajeId       Int       @map("viaje_id")
+  viaje         ViajeOficio @relation(fields: [viajeId], references: [id], onDelete: Cascade)
+  
+  inspectorId   Int       @map("inspector_id")
+  inspector     Usuario   @relation("InspectorEnViajes", fields: [inspectorId], references: [id])
+  
+  @@map("viajes_oficio_inspectores")
+  @@index([viajeId])
+  @@index([inspectorId])
+  @@unique([viajeId, inspectorId])
+}
+
+// -------- ACTAS DE INSPECCIÓN DE OFICIO --------
+
+model ActaInspeccionOficio {
+  id                Int       @id @default(autoincrement())
+  numeroActa        String    @unique @db.VarChar(50) @map("numero_acta")
+  
+  viajeId           Int       @map("viaje_id")
+  viaje             ViajeOficio @relation(fields: [viajeId], references: [id])
+  
+  // Inspector que llenó esta acta específica
+  inspectorId       Int       @map("inspector_id")
+  inspector         Usuario   @relation("ActasLlenadasPorInspector", fields: [inspectorId], references: [id])
+  
+  // Empresa inspeccionada (puede existir o crearse)
+  empresaId         Int       @map("empresa_id")
+  empresa           EmpresaInspeccionada @relation(fields: [empresaId], references: [id])
+  
+  // PDF del acta escaneada
+  rutaPdfActa       String    @db.VarChar(500) @map("ruta_pdf_acta")
+  
+  // Resultado de la inspección
+  resultadoInspeccion String  @db.Text @map("resultado_inspeccion")
+  requiereSeguimiento Boolean @default(false) @map("requiere_seguimiento")
+  
+  // Si requiere seguimiento, se genera un caso
+  casoGeneradoId    Int?      @unique @map("caso_generado_id")
+  casoGenerado      CasoInspeccion? @relation("ActaGeneraCaso", fields: [casoGeneradoId], references: [id])
+  
+  fechaInspeccion   DateTime  @map("fecha_inspeccion")
+  observaciones     String?   @db.Text
+  
+  creadoEn          DateTime  @default(now()) @map("creado_en")
+  actualizadoEn     DateTime  @updatedAt @map("actualizado_en")
+  
+  @@map("actas_inspeccion_oficio")
+  @@index([viajeId])
+  @@index([empresaId])
+  @@index([inspectorId])
+  @@index([numeroActa])
+}
+
+// -------- DENUNCIAS (INSPECCIÓN DE PARTE) --------
+
+model Denuncia {
+  id                    Int       @id @default(autoincrement())
+  codigo                String    @unique @db.VarChar(50) // DEN-YYYY-NNNN
+  
+  // Datos del denunciante
+  denuncianteNombre     String    @db.VarChar(255) @map("denunciante_nombre")
+  denuncianteTelefono   String?   @db.VarChar(50) @map("denunciante_telefono")
+  denuncianteEmail      String?   @db.VarChar(255) @map("denunciante_email")
+  denuncianteDireccion  String?   @db.Text @map("denunciante_direccion")
+  
+  // Archivos adjuntos
+  rutaCedulaDenunciante String    @db.VarChar(500) @map("ruta_cedula_denunciante")
+  rutaComunicacion      String    @db.VarChar(500) @map("ruta_comunicacion")
+  
+  // Detalles de la denuncia
+  empresaDenunciada     String    @db.VarChar(255) @map("empresa_denunciada")
+  direccionEmpresa      String?   @db.Text @map("direccion_empresa")
+  descripcionHechos     String    @db.Text @map("descripcion_hechos")
+  
+  // Pago
+  facturaId             Int?      @unique @map("factura_id")
+  factura               Factura?  @relation("FacturaDenuncia", fields: [facturaId], references: [id])
+  
+  // Estado de la denuncia
+  estadoDenunciaId      Int       @map("estado_denuncia_id")
+  estadoDenuncia        EstadoDenuncia @relation(fields: [estadoDenunciaId], references: [id])
+  
+  // Caso generado si se acepta la denuncia
+  casoGeneradoId        Int?      @unique @map("caso_generado_id")
+  casoGenerado          CasoInspeccion? @relation("DenunciaGeneraCaso", fields: [casoGeneradoId], references: [id])
+  
+  // Auditoría
+  recibidoPorId         Int       @map("recibido_por_id")
+  recibidoPor           Usuario   @relation("DenunciasRecibidas", fields: [recibidoPorId], references: [id])
+  
+  creadoEn              DateTime  @default(now()) @map("creado_en")
+  actualizadoEn         DateTime  @updatedAt @map("actualizado_en")
+  
+  @@map("denuncias")
+  @@index([codigo])
+  @@index([estadoDenunciaId])
+  @@index([denuncianteNombre])
+}
+
+model EstadoDenuncia {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50) 
+  // PENDIENTE_PAGO, PAGADA, EN_PLANIFICACION, ASIGNADA, COMPLETADA, RECHAZADA
+  descripcion String?   @db.Text
+  orden       Int       @default(0)
+  
+  denuncias   Denuncia[]
+  
+  @@map("estados_denuncia")
+}
+
+// -------- MÓDULO JURÍDICO --------
+
+model CasoJuridico {
+  id                Int       @id @default(autoincrement())
+  
+  casoInspeccionId  Int       @unique @map("caso_inspeccion_id")
+  casoInspeccion    CasoInspeccion @relation("CasoEnJuridico", fields: [casoInspeccionId], references: [id])
+  
+  estadoJuridicoId  Int       @map("estado_juridico_id")
+  estadoJuridico    EstadoCasoJuridico @relation(fields: [estadoJuridicoId], references: [id])
+  
+  fechaRecepcion    DateTime  @default(now()) @map("fecha_recepcion")
+  fechaCierre       DateTime? @map("fecha_cierre")
+  
+  recibidoPorId     Int?      @map("recibido_por_id")
+  recibidoPor       Usuario?  @relation("CasosJuridicosRecibidos", fields: [recibidoPorId], references: [id])
+  
+  observaciones     String?   @db.Text
+  
+  creadoEn          DateTime  @default(now()) @map("creado_en")
+  actualizadoEn     DateTime  @updatedAt @map("actualizado_en")
+  
+  @@map("casos_juridico")
+  @@index([casoInspeccionId])
+  @@index([estadoJuridicoId])
+}
+
+model EstadoCasoJuridico {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(50) 
+  // RECIBIDO, EN_ATENCION, CERRADO
+  descripcion String?   @db.Text
+  orden       Int       @default(0)
+  
+  casos       CasoJuridico[]
+  
+  @@map("estados_caso_juridico")
 }

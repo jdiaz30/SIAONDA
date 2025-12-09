@@ -255,6 +255,34 @@ export const deleteCliente = asyncHandler(async (req: Request, res: Response) =>
   res.json({ message: 'Cliente eliminado exitosamente' });
 });
 
+// GET /api/clientes/buscar?q=...
+export const buscarClientes = asyncHandler(async (req: Request, res: Response) => {
+  const query = req.query.q as string;
+
+  if (!query || query.length < 3) {
+    return res.json([]);
+  }
+
+  const clientes = await prisma.cliente.findMany({
+    where: {
+      OR: [
+        { identificacion: { contains: query, mode: 'insensitive' } },
+        { nombrecompleto: { contains: query, mode: 'insensitive' } },
+        { nombre: { contains: query, mode: 'insensitive' } },
+        { apellido: { contains: query, mode: 'insensitive' } }
+      ]
+    },
+    include: {
+      tipo: true,
+      nacionalidad: true
+    },
+    take: 10,
+    orderBy: { nombrecompleto: 'asc' }
+  });
+
+  res.json(clientes);
+});
+
 // GET /api/clientes/buscar/identificacion/:identificacion
 export const buscarPorIdentificacion = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const { identificacion } = req.params;

@@ -53,19 +53,16 @@ export const calcularCostoTotal = async (
   productos: Array<{ productoId: number; cantidad: number }>
 ): Promise<{ subtotal: number; itbis: number; total: number; detalle: Array<any> }> => {
   let subtotal = 0;
-  let itbis = 0;
   const detalle = [];
 
   for (const item of productos) {
     const precioUnitario = await obtenerCostoProducto(item.productoId, item.cantidad);
     const itemSubtotal = precioUnitario * item.cantidad;
 
-    // ITBIS (18% en República Dominicana) - ajustar según configuración
-    const TASA_ITBIS = 0.18;
-    const itemItbis = itemSubtotal * TASA_ITBIS;
+    // ONDA es una institución sin fines de lucro, no cobra ITBIS
+    const itemItbis = 0;
 
     subtotal += itemSubtotal;
-    itbis += itemItbis;
 
     detalle.push({
       productoId: item.productoId,
@@ -73,14 +70,14 @@ export const calcularCostoTotal = async (
       precioUnitario,
       subtotal: itemSubtotal,
       itbis: itemItbis,
-      total: itemSubtotal + itemItbis
+      total: itemSubtotal
     });
   }
 
   return {
     subtotal,
-    itbis,
-    total: subtotal + itbis,
+    itbis: 0, // ONDA no cobra ITBIS
+    total: subtotal,
     detalle
   };
 };

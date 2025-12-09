@@ -134,6 +134,11 @@ export const clientesService = {
     }
   },
 
+  buscarClientes: async (query: string): Promise<Cliente[]> => {
+    const response = await api.get(`/clientes/buscar?q=${encodeURIComponent(query)}`);
+    return response.data;
+  },
+
   getTipos: async (): Promise<ClienteTipo[]> => {
     const response = await api.get('/clientes/tipos');
     return response.data;
@@ -144,3 +149,5 @@ export const clientesService = {
     return response.data;
   }
 };
+
+export default clientesService;

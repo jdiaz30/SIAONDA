@@ -7,6 +7,7 @@ import {
   createCliente,
   updateCliente,
   deleteCliente,
+  buscarClientes,
   buscarPorIdentificacion,
   getTiposCliente,
   getNacionalidades,
@@ -22,6 +23,7 @@ router.get('/tipos', getTiposCliente);
 router.get('/nacionalidades', getNacionalidades);
 
 // Búsqueda especial
+router.get('/buscar', buscarClientes); // Nueva ruta para búsqueda general
 router.get('/buscar/identificacion/:identificacion', buscarPorIdentificacion);
 
 // CRUD principal

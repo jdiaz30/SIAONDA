@@ -7,8 +7,8 @@ import { AppError, asyncHandler } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 
 const loginSchema = z.object({
-  email: z.string().min(1, 'El usuario o correo es requerido'),
-  password: z.string().min(1, 'La contraseña es requerida')
+  nombre: z.string().min(1, 'El usuario o correo es requerido'),
+  contrasena: z.string().min(1, 'La contraseña es requerida')
 });
 
 const refreshSchema = z.object({
@@ -16,14 +16,14 @@ const refreshSchema = z.object({
 });
 
 export const login = asyncHandler(async (req: Request, res: Response) => {
-  const { email, password } = loginSchema.parse(req.body);
+  const { nombre, contrasena } = loginSchema.parse(req.body);
 
   // Buscar usuario por nombre o correo
   const usuario = await prisma.usuario.findFirst({
     where: {
       OR: [
-        { nombre: email },
-        { correo: email }
+        { nombre: nombre },
+        { correo: nombre }
       ]
     },
     include: {
@@ -42,7 +42,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Verificar contraseña
-  const isValidPassword = await comparePassword(password, usuario.contrasena);
+  const isValidPassword = await comparePassword(contrasena, usuario.contrasena);
 
   if (!isValidPassword) {
     // Incrementar intentos fallidos

@@ -1,33 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-
-interface Formulario {
-  id: number;
-  codigo: string;
-  fecha: string;
-  estadoId: number;
-  estado: {
-    id: number;
-    nombre: string;
-  };
-  usuario: {
-    id: number;
-    nombrecompleto: string;
-  };
-  clientes: Array<{
-    cliente: {
-      id: number;
-      nombrecompleto: string;
-      identificacion: string;
-    };
-  }>;
-  productos: Array<{
-    producto: {
-      id: number;
-      nombre: string;
-    };
-  }>;
-}
+import { formulariosService, Formulario } from '../../services/formulariosService';
 
 export default function FormulariosPage() {
   const [formularios, setFormularios] = useState<Formulario[]>([]);
@@ -42,12 +15,13 @@ export default function FormulariosPage() {
   const loadFormularios = async () => {
     try {
       setLoading(true);
-      // TODO: Implementar llamada al API
-      // const response = await formulariosService.getFormularios({ estado: filtroEstado });
-      // setFormularios(response);
-      setFormularios([]);
+      const response = await formulariosService.getFormularios({
+        estado: filtroEstado || undefined
+      });
+      setFormularios(response);
     } catch (error) {
       console.error('Error cargando formularios:', error);
+      setFormularios([]);
     } finally {
       setLoading(false);
     }
@@ -57,7 +31,7 @@ export default function FormulariosPage() {
     const colores: Record<string, string> = {
       'Pendiente': 'bg-yellow-100 text-yellow-800',
       'Recibido': 'bg-blue-100 text-blue-800',
-      'En Proceso': 'bg-purple-100 text-purple-800',
+      'En Proceso': 'bg-green-100 text-green-800',
       'Asentado': 'bg-green-100 text-green-800',
       'Certificado': 'bg-emerald-100 text-emerald-800',
     };
@@ -68,7 +42,8 @@ export default function FormulariosPage() {
     const coincideBusqueda = !busqueda ||
       f.codigo.toLowerCase().includes(busqueda.toLowerCase()) ||
       f.clientes.some(c => c.cliente.nombrecompleto.toLowerCase().includes(busqueda.toLowerCase())) ||
-      f.clientes.some(c => c.cliente.identificacion.includes(busqueda));
+      f.clientes.some(c => c.cliente.identificacion.includes(busqueda)) ||
+      f.usuario.nombrecompleto.toLowerCase().includes(busqueda.toLowerCase());
 
     return coincideBusqueda;
   });
@@ -89,15 +64,26 @@ export default function FormulariosPage() {
           <h1 className="text-2xl font-bold text-gray-900">Formularios de Registro</h1>
           <p className="text-gray-600">Gestión de solicitudes de registro de obras</p>
         </div>
-        <Link
-          to="/formularios/nuevo"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nuevo Formulario
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            to="/formularios/irc/nuevo"
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            Solicitud IRC
+          </Link>
+          <Link
+            to="/formularios/nuevo"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Registro de Obra
+          </Link>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -236,7 +222,11 @@ export default function FormulariosPage() {
                         Ver
                       </Link>
                       <Link
-                        to={`/formularios/${formulario.id}/editar`}
+                        to={
+                          formulario.productos.some(p => p.producto.codigo === 'IRC-01')
+                            ? `/formularios/irc/${formulario.id}/editar`
+                            : `/formularios/${formulario.id}/editar`
+                        }
                         className="text-green-600 hover:text-green-900"
                       >
                         Editar
